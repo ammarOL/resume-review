@@ -508,7 +508,6 @@ export default function ResumeReviewer() {
 
         <section className="grid flex-1 gap-4 py-4 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
           <ResumeImagePreview
-            fileName={fileName || selectedFileName}
             isParsingFile={isParsingFile}
             previewImages={previewImages}
           />
@@ -540,23 +539,11 @@ export default function ResumeReviewer() {
 
             <div>
               <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
-                <div className="flex items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
-                  <div>
-                    <h2 className="text-base font-semibold">Feedback</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Sorted by severity and original line number.
-                    </p>
-                  </div>
-                  <span className="rounded-[2px] bg-primary px-2.5 py-1 text-xs font-semibold text-white">
-                    {hasResume ? `${analysis.stats.issues} issues` : "Waiting"}
-                  </span>
-                </div>
-
-                <div className="max-h-[620px] space-y-3 overflow-auto p-3">
+                <div className="max-h-[620px] overflow-auto">
                   {!hasResume ? (
                     <EmptyState />
                   ) : analysis.feedback.length === 0 ? (
-                    <div className="rounded-[2px] bg-white p-4">
+                    <div className="bg-white p-4">
                       <h3 className="font-semibold">No obvious issues found</h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         This heuristic pass did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
@@ -564,8 +551,8 @@ export default function ResumeReviewer() {
                     </div>
                   ) : (
                     feedbackGroups.map((group) => (
-                      <section key={group.section} className="space-y-3">
-                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border border-[oklch(var(--line))] bg-white px-3 py-2">
+                      <section key={group.section}>
+                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-y border-[oklch(var(--line))] bg-[oklch(var(--surface))] px-4 py-2 first:border-t-0">
                           <h3 className="text-sm font-semibold">{group.section}</h3>
                           <span className="text-xs font-medium text-muted-foreground">
                             {group.issues.length} issue{group.issues.length === 1 ? "" : "s"}
@@ -676,28 +663,14 @@ function UploadDropzone({
 }
 
 function ResumeImagePreview({
-  fileName,
   isParsingFile,
   previewImages,
 }: {
-  fileName: string;
   isParsingFile: boolean;
   previewImages: string[];
 }) {
   return (
     <section className="min-h-[620px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
-        <div>
-          <h2 className="text-lg font-semibold">Resume Preview</h2>
-          <p className="text-sm text-muted-foreground">
-            {fileName ? fileName : "The uploaded resume image appears here."}
-          </p>
-        </div>
-        <span className="rounded-[2px] bg-white px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-          {previewImages.length > 0 ? `${previewImages.length} page${previewImages.length === 1 ? "" : "s"}` : "Waiting"}
-        </span>
-      </div>
-
       <div className="max-h-[780px] overflow-auto bg-[oklch(var(--preview-bg))] p-4">
         {previewImages.length > 0 ? (
           <div className="space-y-5">
@@ -740,24 +713,20 @@ function ResumeImagePreview({
 function FeedbackItem({ item }: { item: Feedback }) {
   const severityClass =
     item.severity === "critical"
-      ? "bg-[oklch(var(--danger-bg))] text-[oklch(var(--danger-ink))] border-[oklch(var(--danger-line))]"
-      : "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))] border-[oklch(var(--warning-line))]";
+      ? "text-[oklch(var(--danger-ink))]"
+      : "text-[oklch(var(--warning-ink))]";
 
   return (
-    <article className="rounded-[2px] border border-[oklch(var(--line))] bg-white p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-[2px] border px-2 py-0.5 text-xs font-semibold ${severityClass}`}>
-          {severityLabel(item.severity)}
-        </span>
-        <span className="text-xs font-medium text-muted-foreground">
-          {item.section} · line {item.lineNumber}
-        </span>
+    <article className="border-b border-[oklch(var(--line))] bg-white px-4 py-3 last:border-b-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={`text-xs font-semibold ${severityClass}`}>{severityLabel(item.severity)}</span>
+        <span className="text-xs font-medium text-muted-foreground">line {item.lineNumber}</span>
       </div>
-      <h3 className="mt-3 text-base font-semibold">{item.title}</h3>
-      <blockquote className="mt-2 border-l border-[oklch(var(--line-strong))] pl-3 font-mono text-sm leading-6 text-[oklch(var(--quote))]">
+      <h3 className="mt-2 text-sm font-semibold">{item.title}</h3>
+      <blockquote className="mt-2 font-mono text-sm leading-6 text-[oklch(var(--quote))]">
         {item.line}
       </blockquote>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.detail}</p>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
     </article>
   );
 }
