@@ -469,27 +469,27 @@ export default function ResumeReviewer() {
 
   return (
     <main className="min-h-screen bg-[oklch(var(--bg))] text-[oklch(var(--ink))]">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="relative flex flex-col gap-4 border-b border-[oklch(var(--line))] pb-5 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-4 py-4 sm:px-6">
+        <header className="relative flex flex-col gap-3 border-b border-[oklch(var(--line))] pb-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold text-[oklch(var(--primary-deep))]">Resume Reviewer</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
-              Upload a resume. Get direct line-by-line criticism.
-            </h1>
+            <h1 className="text-xl font-semibold tracking-normal">Resume Reviewer</h1>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Upload a resume, inspect the source document, and review direct section-level feedback.
+            </p>
           </div>
           <div className="relative">
             <Button
               type="button"
               onClick={() => setIsUploadOpen((value) => !value)}
               aria-expanded={isUploadOpen}
-              className="h-10 px-3"
+              className="h-9 rounded-[2px] px-3"
             >
               <FileUp className="size-4" />
               Add resume
             </Button>
 
             {isUploadOpen ? (
-              <div className="absolute right-0 z-20 mt-2 w-[min(92vw,420px)] rounded-lg border border-[oklch(var(--line))] bg-white p-3 shadow-sm">
+              <div className="absolute right-0 z-20 mt-2 w-[min(92vw,420px)] rounded-[2px] border border-[oklch(var(--line-strong))] bg-white p-3">
                 <UploadDropzone
                   fileError={fileError}
                   handleDrop={handleDrop}
@@ -506,17 +506,17 @@ export default function ResumeReviewer() {
           </div>
         </header>
 
-        <section className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
+        <section className="grid flex-1 gap-4 py-4 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
           <ResumeImagePreview
             fileName={fileName || selectedFileName}
             isParsingFile={isParsingFile}
             previewImages={previewImages}
           />
 
-          <div className="flex min-h-[620px] flex-col gap-4">
+          <div className="flex min-h-[620px] flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold">Generation & Evaluation</h2>
+                <h2 className="text-base font-semibold">Generation & Evaluation</h2>
                 <p className="text-sm text-muted-foreground">
                   {hasResume ? fileName : "Add a resume to generate feedback."}
                 </p>
@@ -526,11 +526,12 @@ export default function ResumeReviewer() {
                 variant="outline"
                 onClick={clearResume}
                 disabled={isParsingFile || (!hasResume && !fileError)}
+                className="rounded-[2px]"
               >
                 Clear
               </Button>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Metric label="Readiness" value={hasResume ? `${analysis.stats.score}%` : "--"} />
               <Metric label="Lines" value={hasResume ? String(analysis.stats.lines) : "--"} />
               <Metric label="Sections" value={hasResume ? String(analysis.stats.sections) : "--"} />
@@ -538,24 +539,24 @@ export default function ResumeReviewer() {
             </div>
 
             <div>
-              <section className="min-h-[494px] rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
+              <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
                 <div className="flex items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
                   <div>
-                    <h2 className="text-lg font-semibold">Feedback</h2>
+                    <h2 className="text-base font-semibold">Feedback</h2>
                     <p className="text-sm text-muted-foreground">
                       Sorted by severity and original line number.
                     </p>
                   </div>
-                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+                  <span className="rounded-[2px] bg-primary px-2.5 py-1 text-xs font-semibold text-white">
                     {hasResume ? `${analysis.stats.issues} issues` : "Waiting"}
                   </span>
                 </div>
 
-                <div className="max-h-[620px] space-y-3 overflow-auto p-4">
+                <div className="max-h-[620px] space-y-3 overflow-auto p-3">
                   {!hasResume ? (
                     <EmptyState />
                   ) : analysis.feedback.length === 0 ? (
-                    <div className="rounded-lg bg-white p-5">
+                    <div className="rounded-[2px] bg-white p-4">
                       <h3 className="font-semibold">No obvious issues found</h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         This heuristic pass did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
@@ -564,7 +565,7 @@ export default function ResumeReviewer() {
                   ) : (
                     feedbackGroups.map((group) => (
                       <section key={group.section} className="space-y-3">
-                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-md border border-[oklch(var(--line))] bg-white px-3 py-2">
+                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border border-[oklch(var(--line))] bg-white px-3 py-2">
                           <h3 className="text-sm font-semibold">{group.section}</h3>
                           <span className="text-xs font-medium text-muted-foreground">
                             {group.issues.length} issue{group.issues.length === 1 ? "" : "s"}
@@ -588,9 +589,9 @@ export default function ResumeReviewer() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))] p-3">
+    <div className="rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
+      <p className="mt-1 text-xl font-semibold">{value}</p>
     </div>
   );
 }
@@ -625,7 +626,7 @@ function UploadDropzone({
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center transition ${
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-[2px] border border-dashed px-4 py-6 text-center transition ${
           isDragging
             ? "border-primary bg-[oklch(var(--primary-soft))]"
             : "border-[oklch(var(--line-strong))] bg-white hover:border-primary"
@@ -644,7 +645,7 @@ function UploadDropzone({
         </span>
         {selectedFileName ? (
           <span
-            className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
+            className={`mt-3 rounded-[2px] px-2.5 py-1 text-xs font-semibold ${
               fileError
                 ? "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]"
                 : "bg-[oklch(var(--success-bg))] text-[oklch(var(--success-ink))]"
@@ -660,13 +661,13 @@ function UploadDropzone({
       </label>
 
       {fileError ? (
-        <div className="mt-3 rounded-md border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
+        <div className="mt-3 rounded-[2px] border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
           {fileError}
         </div>
       ) : null}
 
       <div className="mt-3 flex justify-end">
-        <Button type="button" variant="outline" onClick={loadSample} disabled={isParsingFile}>
+        <Button type="button" variant="outline" onClick={loadSample} disabled={isParsingFile} className="rounded-[2px]">
           Try sample
         </Button>
       </div>
@@ -684,7 +685,7 @@ function ResumeImagePreview({
   previewImages: string[];
 }) {
   return (
-    <section className="min-h-[620px] rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
+    <section className="min-h-[620px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
         <div>
           <h2 className="text-lg font-semibold">Resume Preview</h2>
@@ -692,7 +693,7 @@ function ResumeImagePreview({
             {fileName ? fileName : "The uploaded resume image appears here."}
           </p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted-foreground">
+        <span className="rounded-[2px] bg-white px-2.5 py-1 text-xs font-semibold text-muted-foreground">
           {previewImages.length > 0 ? `${previewImages.length} page${previewImages.length === 1 ? "" : "s"}` : "Waiting"}
         </span>
       </div>
@@ -708,7 +709,7 @@ function ResumeImagePreview({
                   width={816}
                   height={1056}
                   unoptimized
-                  className="h-auto w-full rounded-sm border border-[oklch(var(--line-strong))] bg-white"
+                  className="h-auto w-full border border-[oklch(var(--line-strong))] bg-white"
                 />
                 <figcaption className="mt-2 text-center text-xs font-medium text-muted-foreground">
                   Page {index + 1}
@@ -717,14 +718,14 @@ function ResumeImagePreview({
             ))}
           </div>
         ) : isParsingFile ? (
-          <div className="rounded-lg bg-white p-5">
+          <div className="rounded-[2px] bg-white p-4">
             <h3 className="font-semibold">Rendering resume preview</h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               The file is being parsed locally and converted into page images.
             </p>
           </div>
         ) : (
-          <div className="rounded-lg bg-white p-5">
+          <div className="rounded-[2px] bg-white p-4">
             <h3 className="font-semibold">Your resume will appear here</h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Upload a PDF, DOCX, or text resume. PDFs render as real page images; DOCX and text files render as generated page previews.
@@ -743,9 +744,9 @@ function FeedbackItem({ item }: { item: Feedback }) {
       : "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))] border-[oklch(var(--warning-line))]";
 
   return (
-    <article className="rounded-lg border border-[oklch(var(--line))] bg-white p-4">
+    <article className="rounded-[2px] border border-[oklch(var(--line))] bg-white p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${severityClass}`}>
+        <span className={`rounded-[2px] border px-2 py-0.5 text-xs font-semibold ${severityClass}`}>
           {severityLabel(item.severity)}
         </span>
         <span className="text-xs font-medium text-muted-foreground">
@@ -763,7 +764,7 @@ function FeedbackItem({ item }: { item: Feedback }) {
 
 function EmptyState() {
   return (
-    <div className="rounded-lg bg-white p-5">
+    <div className="rounded-[2px] bg-white p-4">
       <h3 className="font-semibold">Add a resume to start the critique</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         The reviewer will flag vague bullets, missing metrics, soft action verbs, overloaded lines, and section-level weak spots.
