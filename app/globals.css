@@ -25,6 +25,9 @@
   --warning-bg: 0.96 0.045 84;
   --warning-ink: 0.37 0.09 78;
   --warning-line: 0.82 0.07 82;
+  --info-bg: 0.965 0.012 250;
+  --info-ink: 0.34 0.055 250;
+  --info-line: 0.82 0.035 250;
   --success-bg: 0.95 0.036 154;
   --success-ink: 0.31 0.085 155;
   --success-line: 0.78 0.07 155;

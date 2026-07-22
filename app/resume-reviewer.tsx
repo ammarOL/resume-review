@@ -530,12 +530,7 @@ export default function ResumeReviewer() {
                 Clear
               </Button>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Metric label="Readiness" value={hasResume ? `${analysis.stats.score}%` : "--"} />
-              <Metric label="Lines" value={hasResume ? String(analysis.stats.lines) : "--"} />
-              <Metric label="Sections" value={hasResume ? String(analysis.stats.sections) : "--"} />
-              <Metric label="Critical" value={hasResume ? String(analysis.stats.critical) : "--"} />
-            </div>
+            <SeverityLegend />
 
             <div>
               <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
@@ -574,11 +569,34 @@ export default function ResumeReviewer() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function SeverityLegend() {
+  const levels = [
+    {
+      label: "Informative",
+      className: "border-[oklch(var(--info-line))] bg-[oklch(var(--info-bg))] text-[oklch(var(--info-ink))]",
+    },
+    {
+      label: "Improve",
+      className:
+        "border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]",
+    },
+    {
+      label: "Critical",
+      className:
+        "border-[oklch(var(--danger-line))] bg-[oklch(var(--danger-bg))] text-[oklch(var(--danger-ink))]",
+    },
+  ];
+
   return (
-    <div className="rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold">{value}</p>
+    <div className="border border-[oklch(var(--line))] bg-white px-3 py-2">
+      <p className="text-xs font-medium text-muted-foreground">Feedback severity</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {levels.map((level) => (
+          <span key={level.label} className={`border px-2 py-1 text-xs font-semibold ${level.className}`}>
+            {level.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -711,15 +729,23 @@ function ResumeImagePreview({
 }
 
 function FeedbackItem({ item }: { item: Feedback }) {
-  const severityClass =
+  const severityTextClass =
     item.severity === "critical"
       ? "text-[oklch(var(--danger-ink))]"
-      : "text-[oklch(var(--warning-ink))]";
+      : item.severity === "improve"
+        ? "text-[oklch(var(--warning-ink))]"
+        : "text-[oklch(var(--info-ink))]";
+  const severityBackgroundClass =
+    item.severity === "critical"
+      ? "bg-[oklch(var(--danger-bg))]"
+      : item.severity === "improve"
+        ? "bg-[oklch(var(--warning-bg))]"
+        : "bg-[oklch(var(--info-bg))]";
 
   return (
-    <article className="border-b border-[oklch(var(--line))] bg-white px-4 py-3 last:border-b-0">
+    <article className={`border-b border-[oklch(var(--line))] px-4 py-3 last:border-b-0 ${severityBackgroundClass}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className={`text-xs font-semibold ${severityClass}`}>{severityLabel(item.severity)}</span>
+        <span className={`text-xs font-semibold ${severityTextClass}`}>{severityLabel(item.severity)}</span>
         <span className="text-xs font-medium text-muted-foreground">line {item.lineNumber}</span>
       </div>
       <h3 className="mt-2 text-sm font-semibold">{item.title}</h3>
