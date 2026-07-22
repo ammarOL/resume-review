@@ -803,11 +803,13 @@ function FeedbackItem({ item }: { item: Feedback }) {
         <span className={`text-xs font-semibold ${severityTextClass}`}>{severityLabel(item.severity)}</span>
         <span className="text-xs font-medium text-muted-foreground">line {item.lineNumber}</span>
       </div>
-      <h3 className="mt-2 text-sm font-semibold">{item.title}</h3>
-      <blockquote className="mt-2 font-mono text-sm leading-6 text-[oklch(var(--quote))]">
-        {item.line}
-      </blockquote>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
+      <h3 className="mt-2 text-base font-semibold">{item.title}</h3>
+      <div className="mt-2 border-l border-[oklch(var(--line-strong))] pl-3">
+        <blockquote className="font-mono text-xs leading-5 text-[oklch(var(--quote))]">
+          {item.line}
+        </blockquote>
+      </div>
+      <p className="mt-3 text-base leading-7 text-[oklch(var(--ink))]">{item.detail}</p>
     </article>
   );
 }
