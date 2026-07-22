@@ -30,9 +30,19 @@ type FeedbackGroup = {
   issues: Feedback[];
 };
 
+type HighlightArea = {
+  pageIndex: number;
+  lineNumber: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
 type ParsedResume = {
   text: string;
   previewImages: string[];
+  highlightAreas: HighlightArea[];
 };
 
 const SECTION_HEADERS = [
@@ -270,20 +280,36 @@ function wrapPreviewLine(line: string) {
   return wrapped;
 }
 
-function createResumePreviewImages(text: string, title: string): string[] {
+function createResumePreviewData(text: string, title: string): Pick<ParsedResume, "previewImages" | "highlightAreas"> {
   const normalizedLines = text
     .replace(/\r\n/g, "\n")
     .split("\n")
-    .flatMap((line) => wrapPreviewLine(line || " "));
+    .flatMap((line, lineIndex) =>
+      wrapPreviewLine(line || " ").map((wrappedLine) => ({
+        line: wrappedLine,
+        lineNumber: lineIndex + 1,
+      })),
+    );
   const pages: string[] = [];
+  const highlightAreas: HighlightArea[] = [];
   const linesPerPage = 48;
 
   for (let start = 0; start < normalizedLines.length; start += linesPerPage) {
     const pageLines = normalizedLines.slice(start, start + linesPerPage);
+    const pageIndex = pages.length;
     const textRows = pageLines
-      .map((line, index) => {
+      .map(({ line, lineNumber }, index) => {
         const y = 104 + index * 18;
         const weight = index === 0 && start === 0 ? 700 : 400;
+        const width = Math.min(672, Math.max(32, line.trim().length * 7.1));
+        highlightAreas.push({
+          pageIndex,
+          lineNumber,
+          left: 72 / 816,
+          top: (y - 13) / 1056,
+          width: width / 816,
+          height: 17 / 1056,
+        });
         return `<text x="72" y="${y}" font-size="13" font-weight="${weight}" fill="oklch(0.205 0.018 62)">${escapeSvgText(line)}</text>`;
       })
       .join("");
@@ -297,7 +323,11 @@ function createResumePreviewImages(text: string, title: string): string[] {
     pages.push(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
   }
 
-  return pages.length > 0 ? pages : createResumePreviewImages("No readable resume text found.", title);
+  if (pages.length > 0) {
+    return { previewImages: pages, highlightAreas };
+  }
+
+  return createResumePreviewData("No readable resume text found.", title);
 }
 
 async function parsePdfResume(file: File): Promise<ParsedResume> {
@@ -311,10 +341,40 @@ async function parsePdfResume(file: File): Promise<ParsedResume> {
   const pdf = await pdfjs.getDocument({ data }).promise;
   const textPages: string[] = [];
   const previewImages: string[] = [];
+  const highlightAreas: HighlightArea[] = [];
+  let lineNumber = 1;
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1.45 });
+    for (const item of textContent.items) {
+      if (!("str" in item)) continue;
+
+      const text = item.str.trim();
+
+      if (text) {
+        const transform = pdfjs.Util.transform(viewport.transform, item.transform);
+        const left = transform[4] / viewport.width;
+        const top = (transform[5] - item.height) / viewport.height;
+        const width = item.width / viewport.width;
+        const height = Math.max(item.height, 8) / viewport.height;
+
+        highlightAreas.push({
+          pageIndex: pageNumber - 1,
+          lineNumber,
+          left: Math.max(0, left),
+          top: Math.max(0, top),
+          width: Math.min(1 - Math.max(0, left), Math.max(width, 0.012)),
+          height: Math.min(0.05, Math.max(height, 0.012)),
+        });
+      }
+
+      if (item.hasEOL) {
+        lineNumber += 1;
+      }
+    }
+
     const pageText = textContent.items
       .map((item) => ("str" in item ? `${item.str}${item.hasEOL ? "\n" : " "}` : ""))
       .join("")
@@ -324,7 +384,6 @@ async function parsePdfResume(file: File): Promise<ParsedResume> {
 
     if (pageText) textPages.push(pageText);
 
-    const viewport = page.getViewport({ scale: 1.45 });
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
 
@@ -339,6 +398,7 @@ async function parsePdfResume(file: File): Promise<ParsedResume> {
   return {
     text: textPages.join("\n\n"),
     previewImages,
+    highlightAreas,
   };
 }
 
@@ -349,7 +409,7 @@ async function parseDocxResume(file: File): Promise<ParsedResume> {
 
   return {
     text,
-    previewImages: createResumePreviewImages(text, file.name),
+    ...createResumePreviewData(text, file.name),
   };
 }
 
@@ -371,13 +431,14 @@ async function parseResumeFile(file: File): Promise<ParsedResume> {
 
   return {
     text,
-    previewImages: createResumePreviewImages(text, file.name),
+    ...createResumePreviewData(text, file.name),
   };
 }
 
 export default function ResumeReviewer() {
   const [resumeText, setResumeText] = useState("");
   const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [highlightAreas, setHighlightAreas] = useState<HighlightArea[]>([]);
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
@@ -450,18 +511,21 @@ export default function ResumeReviewer() {
       if (!parsed.text.trim()) {
         setFileName("");
         setPreviewImages([]);
+        setHighlightAreas([]);
         setFileError(`${file.name} was selected, but no readable text was found in it.`);
         return;
       }
 
       setResumeText(parsed.text);
       setPreviewImages(parsed.previewImages);
+      setHighlightAreas(parsed.highlightAreas);
       setFileName(file.name);
       setActiveFeedbackId(null);
       setIsUploadOpen(false);
     } catch {
       setFileName("");
       setPreviewImages([]);
+      setHighlightAreas([]);
       setFileError(`${file.name} was selected, but I could not parse it locally. Try exporting it as PDF, DOCX, or plain text.`);
     } finally {
       setIsParsingFile(false);
@@ -483,6 +547,7 @@ export default function ResumeReviewer() {
   const clearResume = () => {
     setResumeText("");
     setPreviewImages([]);
+    setHighlightAreas([]);
     setFileName("");
     setFileError("");
     setSelectedFileName("");
@@ -494,8 +559,10 @@ export default function ResumeReviewer() {
   };
 
   const loadSample = () => {
+    const previewData = createResumePreviewData(SAMPLE_RESUME, "sample-resume.txt");
     setResumeText(SAMPLE_RESUME);
-    setPreviewImages(createResumePreviewImages(SAMPLE_RESUME, "sample-resume.txt"));
+    setPreviewImages(previewData.previewImages);
+    setHighlightAreas(previewData.highlightAreas);
     setFileName("sample-resume.txt");
     setSelectedFileName("sample-resume.txt");
     setSelectedSeverity(null);
@@ -547,9 +614,9 @@ export default function ResumeReviewer() {
           <ResumeImagePreview
             activeLineNumber={activeLineNumber}
             flaggedLineSeverities={flaggedLineSeverities}
+            highlightAreas={highlightAreas}
             isParsingFile={isParsingFile}
             previewImages={previewImages}
-            totalLines={analysis.stats.lines}
           />
 
           <div className="flex min-h-[620px] flex-col gap-3">
@@ -767,18 +834,16 @@ function UploadDropzone({
 function ResumeImagePreview({
   activeLineNumber,
   flaggedLineSeverities,
+  highlightAreas,
   isParsingFile,
   previewImages,
-  totalLines,
 }: {
   activeLineNumber: number | null;
   flaggedLineSeverities: Map<number, Severity>;
+  highlightAreas: HighlightArea[];
   isParsingFile: boolean;
   previewImages: string[];
-  totalLines: number;
 }) {
-  const linesPerPage = Math.max(1, Math.ceil(Math.max(totalLines, 1) / Math.max(previewImages.length, 1)));
-
   return (
     <section className="top-4 rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))] lg:sticky lg:max-h-[calc(100vh-2rem)]">
       <div className="overflow-auto bg-[oklch(var(--preview-bg))] p-4 lg:max-h-[calc(100vh-2rem)]">
@@ -798,8 +863,7 @@ function ResumeImagePreview({
                   <ResumeHighlights
                     activeLineNumber={activeLineNumber}
                     flaggedLineSeverities={flaggedLineSeverities}
-                    lineEnd={(index + 1) * linesPerPage}
-                    lineStart={index * linesPerPage + 1}
+                    highlightAreas={highlightAreas.filter((area) => area.pageIndex === index)}
                   />
                 </div>
                 <figcaption className="mt-2 text-center text-xs font-medium text-muted-foreground">
@@ -831,13 +895,11 @@ function ResumeImagePreview({
 function ResumeHighlights({
   activeLineNumber,
   flaggedLineSeverities,
-  lineEnd,
-  lineStart,
+  highlightAreas,
 }: {
   activeLineNumber: number | null;
   flaggedLineSeverities: Map<number, Severity>;
-  lineEnd: number;
-  lineStart: number;
+  highlightAreas: HighlightArea[];
 }) {
   const severityClass = (severity: Severity, isActive: boolean) => {
     if (severity === "critical") {
@@ -850,22 +912,24 @@ function ResumeHighlights({
 
     return isActive ? "bg-[oklch(0.82_0.08_250_/_0.5)]" : "bg-[oklch(0.82_0.08_250_/_0.18)]";
   };
-  const pageLineCount = Math.max(1, lineEnd - lineStart + 1);
-  const highlights = Array.from(flaggedLineSeverities.entries()).filter(
-    ([lineNumber]) => lineNumber >= lineStart && lineNumber <= lineEnd,
-  );
+  const highlights = highlightAreas.filter((area) => flaggedLineSeverities.has(area.lineNumber));
 
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-      {highlights.map(([lineNumber, severity]) => {
-        const isActive = activeLineNumber === lineNumber;
-        const top = 7 + ((lineNumber - lineStart) / pageLineCount) * 86;
+      {highlights.map((area, index) => {
+        const severity = flaggedLineSeverities.get(area.lineNumber) ?? "solid";
+        const isActive = activeLineNumber === area.lineNumber;
 
         return (
           <div
-            key={lineNumber}
-            className={`absolute left-[6.5%] right-[6.5%] h-[2.15%] ${severityClass(severity, isActive)}`}
-            style={{ top: `${top}%` }}
+            key={`${area.lineNumber}-${index}`}
+            className={`absolute ${severityClass(severity, isActive)}`}
+            style={{
+              height: `${area.height * 100}%`,
+              left: `${area.left * 100}%`,
+              top: `${area.top * 100}%`,
+              width: `${area.width * 100}%`,
+            }}
           />
         );
       })}
@@ -906,8 +970,8 @@ function FeedbackItem({
           onSelect();
         }
       }}
-      className={`cursor-pointer border-b border-[oklch(var(--line))] px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/60 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/45 ${
-        isActive ? "bg-white/75" : severityBackgroundClass
+      className={`cursor-pointer border-b border-[oklch(var(--line))] px-4 py-3 text-left transition last:border-b-0 hover:brightness-[1.025] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/45 ${severityBackgroundClass} ${
+        isActive ? "outline outline-1 -outline-offset-1 outline-[oklch(var(--ink))]" : ""
       }`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
