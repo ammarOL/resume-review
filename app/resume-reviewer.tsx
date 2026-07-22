@@ -539,7 +539,7 @@ export default function ResumeReviewer() {
 
             <div>
               <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
-                <div className="max-h-[620px] overflow-auto">
+                <div>
                   {!hasResume ? (
                     <EmptyState />
                   ) : analysis.feedback.length === 0 ? (
@@ -670,8 +670,8 @@ function ResumeImagePreview({
   previewImages: string[];
 }) {
   return (
-    <section className="min-h-[620px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
-      <div className="max-h-[780px] overflow-auto bg-[oklch(var(--preview-bg))] p-4">
+    <section className="top-4 rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))] lg:sticky lg:max-h-[calc(100vh-2rem)]">
+      <div className="overflow-auto bg-[oklch(var(--preview-bg))] p-4 lg:max-h-[calc(100vh-2rem)]">
         {previewImages.length > 0 ? (
           <div className="space-y-5">
             {previewImages.map((src, index) => (
