@@ -685,7 +685,10 @@ export default function ResumeReviewer() {
               <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
                 <div>
                   {!hasResume ? (
-                    <EmptyState />
+                    <NoDataEmptyState
+                      description="Upload a resume to generate direct, section-level feedback. Issues will appear here after parsing."
+                      title="No feedback yet"
+                    />
                   ) : analysis.feedback.length === 0 ? (
                     <div className="bg-white p-4">
                       <h3 className="font-semibold">No obvious issues found</h3>
@@ -928,12 +931,10 @@ function ResumeImagePreview({
             </p>
           </div>
         ) : (
-          <div className="rounded-[2px] bg-white p-4">
-            <h3 className="font-semibold">Your resume will appear here</h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Upload a PDF, DOCX, or text resume. PDFs render as real page images; DOCX and text files render as generated page previews.
-            </p>
-          </div>
+          <NoDataEmptyState
+            description="Upload a PDF, DOCX, or text resume. The document preview will render here after parsing."
+            title="No resume loaded"
+          />
         )}
       </div>
     </section>
@@ -1084,13 +1085,24 @@ function FeedbackItem({
   );
 }
 
-function EmptyState() {
+function NoDataEmptyState({
+  description,
+  title,
+}: {
+  description: string;
+  title: string;
+}) {
   return (
-    <div className="rounded-[2px] bg-white p-4">
-      <h3 className="font-semibold">Add a resume to start the critique</h3>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        The reviewer will flag vague bullets, missing metrics, soft action verbs, overloaded lines, and section-level weak spots.
-      </p>
+    <div className="flex min-h-[420px] flex-col items-center justify-center bg-white px-6 py-8 text-center">
+      <Image
+        src="/no-data.svg"
+        alt=""
+        width={220}
+        height={215}
+        className="mb-5 h-auto w-40 opacity-80 sm:w-48"
+      />
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }
