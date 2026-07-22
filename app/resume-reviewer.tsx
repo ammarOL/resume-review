@@ -573,26 +573,27 @@ function SeverityLegend() {
   const levels = [
     {
       label: "Informative",
-      className: "border-[oklch(var(--info-line))] bg-[oklch(var(--info-bg))] text-[oklch(var(--info-ink))]",
+      className: "border-[oklch(var(--info-line))] text-[oklch(var(--info-ink))]",
     },
     {
       label: "Improve",
-      className:
-        "border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]",
+      className: "border-[oklch(var(--warning-line))] text-[oklch(var(--warning-ink))]",
     },
     {
       label: "Critical",
-      className:
-        "border-[oklch(var(--danger-line))] bg-[oklch(var(--danger-bg))] text-[oklch(var(--danger-ink))]",
+      className: "border-[oklch(var(--danger-line))] text-[oklch(var(--danger-ink))]",
     },
   ];
 
   return (
-    <div className="border border-[oklch(var(--line))] bg-white px-3 py-2">
-      <p className="text-xs font-medium text-muted-foreground">Feedback severity</p>
-      <div className="mt-2 flex flex-wrap gap-2">
+    <div className="border-y border-[oklch(var(--line))] py-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Feedback severity</p>
         {levels.map((level) => (
-          <span key={level.label} className={`border px-2 py-1 text-xs font-semibold ${level.className}`}>
+          <span
+            key={level.label}
+            className={`border-l-2 pl-2 text-xs font-semibold ${level.className}`}
+          >
             {level.label}
           </span>
         ))}
