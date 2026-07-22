@@ -1,26 +1,58 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: 1 0 0;
+  --surface: 0.973 0.004 56.6;
+  --ink: 0.205 0.018 62;
+  --muted: 0.43 0.021 62;
+  --placeholder: 0.49 0.018 62;
+  --line: 0.89 0.011 62;
+  --line-strong: 0.78 0.019 62;
+  --primary: 0.64 0.155 52;
+  --primary-deep: 0.43 0.12 48;
+  --primary-soft: 0.94 0.045 55;
+  --accent: 0.36 0.135 348;
+  --focus: 0.82 0.105 55;
+  --quote: 0.315 0.02 62;
+  --danger-bg: 0.95 0.035 26;
+  --danger-ink: 0.38 0.14 29;
+  --danger-line: 0.82 0.065 28;
+  --warning-bg: 0.96 0.045 84;
+  --warning-ink: 0.37 0.09 78;
+  --warning-line: 0.82 0.07 82;
+  --success-bg: 0.95 0.036 154;
+  --success-ink: 0.31 0.085 155;
+  --success-line: 0.78 0.07 155;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: oklch(var(--bg));
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: oklch(var(--primary-soft));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
