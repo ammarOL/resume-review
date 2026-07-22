@@ -687,6 +687,7 @@ export default function ResumeReviewer() {
                   {!hasResume ? (
                     <NoDataEmptyState
                       description="Upload a resume to generate direct, section-level feedback. Issues will appear here after parsing."
+                      imageSrc="/undraw_to-do-app_esjl.svg"
                       title="No feedback yet"
                     />
                   ) : analysis.feedback.length === 0 ? (
@@ -894,9 +895,13 @@ function ResumeImagePreview({
   onHighlightSelect: (lineNumber: number) => void;
   previewImages: string[];
 }) {
+  const previewContentClass = previewImages.length > 0
+    ? "overflow-auto bg-[oklch(var(--preview-bg))] p-4 lg:max-h-[calc(100vh-2rem)]"
+    : "bg-[oklch(var(--preview-bg))] p-4";
+
   return (
     <section className="top-4 rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))] lg:sticky lg:max-h-[calc(100vh-2rem)]">
-      <div className="overflow-auto bg-[oklch(var(--preview-bg))] p-4 lg:max-h-[calc(100vh-2rem)]">
+      <div className={previewContentClass}>
         {previewImages.length > 0 ? (
           <div className="space-y-5">
             {previewImages.map((src, index) => (
@@ -933,6 +938,7 @@ function ResumeImagePreview({
         ) : (
           <NoDataEmptyState
             description="Upload a PDF, DOCX, or text resume. The document preview will render here after parsing."
+            imageSrc="/no-data.svg"
             title="No resume loaded"
           />
         )}
@@ -1087,15 +1093,17 @@ function FeedbackItem({
 
 function NoDataEmptyState({
   description,
+  imageSrc,
   title,
 }: {
   description: string;
+  imageSrc: string;
   title: string;
 }) {
   return (
-    <div className="flex min-h-[420px] flex-col items-center justify-center bg-white px-6 py-8 text-center">
+    <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center bg-white px-6 py-8 text-center lg:min-h-[calc(100vh-4rem)]">
       <Image
-        src="/no-data.svg"
+        src={imageSrc}
         alt=""
         width={220}
         height={215}
