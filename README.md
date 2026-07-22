@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Resume Reviewer
+
+A local-first resume review tool that lets users upload a resume, inspect the rendered document, and get direct feedback by section and line.
+
+The app is built for people who want practical, critical feedback before sending their resume to recruiters, hiring teams, or peers. It focuses on concrete issues: vague wording, missing metrics, weak action verbs, dense lines, and section-level patterns.
+
+## Features
+
+- Upload PDF, DOCX, plain text, Markdown, RTF, or CSV resumes.
+- Parse resumes in the browser with no file storage.
+- Render uploaded resumes as document previews.
+- Show feedback grouped by resume section.
+- Filter feedback by severity: Informative, Improve, and Critical.
+- Click feedback to highlight the related resume text.
+- Click highlighted resume text to scroll to and select the matching feedback.
+- Keep inactive resume highlights neutral and selected highlights prominent.
+
+## Privacy Model
+
+Resume parsing happens locally in the browser session. The app does not upload resume files to a server and does not persist resume data. Closing the tab clears the in-memory state.
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS
+- shadcn/base-ui components
+- PDF.js for PDF parsing and preview rendering
+- Mammoth for DOCX text extraction
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+```
 
-## Learn More
+## Notes
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+PDF highlights use PDF text-position data where available. DOCX and text-based formats are rendered into generated page previews, so highlight placement follows the generated preview layout.
