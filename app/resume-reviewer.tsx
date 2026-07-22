@@ -953,22 +953,61 @@ function ResumeHighlights({
 }) {
   const severityClass = (severity: Severity, isActive: boolean) => {
     if (severity === "critical") {
-      return isActive ? "bg-[oklch(0.82_0.13_26_/_0.55)]" : "bg-[oklch(0.82_0.13_26_/_0.2)]";
+      return isActive
+        ? "bg-[oklch(0.78_0.16_26_/_0.72)] ring-1 ring-inset ring-[oklch(0.48_0.18_26_/_0.62)]"
+        : "bg-[oklch(0.86_0.08_26_/_0.1)]";
     }
 
     if (severity === "improve") {
-      return isActive ? "bg-[oklch(0.86_0.11_84_/_0.55)]" : "bg-[oklch(0.86_0.11_84_/_0.22)]";
+      return isActive
+        ? "bg-[oklch(0.82_0.14_84_/_0.72)] ring-1 ring-inset ring-[oklch(0.48_0.12_84_/_0.62)]"
+        : "bg-[oklch(0.9_0.07_84_/_0.11)]";
     }
 
-    return isActive ? "bg-[oklch(0.82_0.08_250_/_0.5)]" : "bg-[oklch(0.82_0.08_250_/_0.18)]";
+    return isActive
+      ? "bg-[oklch(0.78_0.1_250_/_0.66)] ring-1 ring-inset ring-[oklch(0.44_0.1_250_/_0.58)]"
+      : "bg-[oklch(0.86_0.06_250_/_0.09)]";
   };
-  const highlights = highlightAreas.filter((area) => flaggedLineSeverities.has(area.lineNumber));
+  const highlights = Array.from(
+    highlightAreas
+      .filter((area) => flaggedLineSeverities.has(area.lineNumber))
+      .reduce((areas, area) => {
+        const current = areas.get(area.lineNumber);
+
+        if (!current) {
+          areas.set(area.lineNumber, area);
+          return areas;
+        }
+
+        const left = Math.min(current.left, area.left);
+        const top = Math.min(current.top, area.top);
+        const right = Math.max(current.left + current.width, area.left + area.width);
+        const bottom = Math.max(current.top + current.height, area.top + area.height);
+
+        areas.set(area.lineNumber, {
+          ...current,
+          left,
+          top,
+          width: right - left,
+          height: bottom - top,
+        });
+
+        return areas;
+      }, new Map<number, HighlightArea>())
+      .values(),
+  );
 
   return (
     <div className="absolute inset-0">
       {highlights.map((area, index) => {
         const severity = flaggedLineSeverities.get(area.lineNumber) ?? "solid";
         const isActive = activeLineNumber === area.lineNumber;
+        const padX = isActive ? 0.006 : 0.004;
+        const padY = isActive ? 0.003 : 0.002;
+        const left = Math.max(0, area.left - padX);
+        const top = Math.max(0, area.top - padY);
+        const right = Math.min(1, area.left + area.width + padX);
+        const bottom = Math.min(1, area.top + area.height + padY);
 
         return (
           <button
@@ -978,10 +1017,10 @@ function ResumeHighlights({
             onClick={() => onHighlightSelect(area.lineNumber)}
             className={`absolute cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/60 ${severityClass(severity, isActive)}`}
             style={{
-              height: `${area.height * 100}%`,
-              left: `${area.left * 100}%`,
-              top: `${area.top * 100}%`,
-              width: `${area.width * 100}%`,
+              height: `${(bottom - top) * 100}%`,
+              left: `${left * 100}%`,
+              top: `${top * 100}%`,
+              width: `${(right - left) * 100}%`,
             }}
           />
         );
