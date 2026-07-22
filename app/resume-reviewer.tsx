@@ -448,6 +448,7 @@ export default function ResumeReviewer() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const feedbackItemRefs = useRef(new Map<string, HTMLElement>());
   const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
   const activeLineNumber = useMemo(() => {
     if (!activeFeedbackId) return null;
@@ -465,6 +466,21 @@ export default function ResumeReviewer() {
     }
 
     return lines;
+  }, [analysis.feedback]);
+  const feedbackIdByLine = useMemo(() => {
+    const severityRank = { critical: 0, improve: 1, solid: 2 };
+    const feedbackByLine = new Map<number, Feedback>();
+
+    for (const item of analysis.feedback) {
+      const current = feedbackByLine.get(item.lineNumber);
+      if (!current || severityRank[item.severity] < severityRank[current.severity]) {
+        feedbackByLine.set(item.lineNumber, item);
+      }
+    }
+
+    return new Map(
+      Array.from(feedbackByLine.entries()).map(([lineNumber, item]) => [lineNumber, item.id]),
+    );
   }, [analysis.feedback]);
   const severityCounts = useMemo(
     () =>
@@ -571,6 +587,27 @@ export default function ResumeReviewer() {
     setIsUploadOpen(false);
   };
 
+  const selectFeedback = (feedbackId: string, shouldScroll = false) => {
+    setSelectedSeverity(null);
+    setActiveFeedbackId(feedbackId);
+
+    if (!shouldScroll) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        feedbackItemRefs.current.get(feedbackId)?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    });
+  };
+
+  const selectFeedbackFromLine = (lineNumber: number) => {
+    const feedbackId = feedbackIdByLine.get(lineNumber);
+    if (feedbackId) selectFeedback(feedbackId, true);
+  };
+
   return (
     <main className="min-h-screen bg-[oklch(var(--bg))] text-[oklch(var(--ink))]">
       <div className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-4 py-4 sm:px-6">
@@ -616,6 +653,7 @@ export default function ResumeReviewer() {
             flaggedLineSeverities={flaggedLineSeverities}
             highlightAreas={highlightAreas}
             isParsingFile={isParsingFile}
+            onHighlightSelect={selectFeedbackFromLine}
             previewImages={previewImages}
           />
 
@@ -676,7 +714,14 @@ export default function ResumeReviewer() {
                             key={item.id}
                             isActive={activeFeedbackId === item.id}
                             item={item}
-                            onSelect={() => setActiveFeedbackId(item.id)}
+                            onRef={(element) => {
+                              if (element) {
+                                feedbackItemRefs.current.set(item.id, element);
+                              } else {
+                                feedbackItemRefs.current.delete(item.id);
+                              }
+                            }}
+                            onSelect={() => selectFeedback(item.id)}
                           />
                         ))}
                       </section>
@@ -836,12 +881,14 @@ function ResumeImagePreview({
   flaggedLineSeverities,
   highlightAreas,
   isParsingFile,
+  onHighlightSelect,
   previewImages,
 }: {
   activeLineNumber: number | null;
   flaggedLineSeverities: Map<number, Severity>;
   highlightAreas: HighlightArea[];
   isParsingFile: boolean;
+  onHighlightSelect: (lineNumber: number) => void;
   previewImages: string[];
 }) {
   return (
@@ -864,6 +911,7 @@ function ResumeImagePreview({
                     activeLineNumber={activeLineNumber}
                     flaggedLineSeverities={flaggedLineSeverities}
                     highlightAreas={highlightAreas.filter((area) => area.pageIndex === index)}
+                    onHighlightSelect={onHighlightSelect}
                   />
                 </div>
                 <figcaption className="mt-2 text-center text-xs font-medium text-muted-foreground">
@@ -896,10 +944,12 @@ function ResumeHighlights({
   activeLineNumber,
   flaggedLineSeverities,
   highlightAreas,
+  onHighlightSelect,
 }: {
   activeLineNumber: number | null;
   flaggedLineSeverities: Map<number, Severity>;
   highlightAreas: HighlightArea[];
+  onHighlightSelect: (lineNumber: number) => void;
 }) {
   const severityClass = (severity: Severity, isActive: boolean) => {
     if (severity === "critical") {
@@ -915,15 +965,18 @@ function ResumeHighlights({
   const highlights = highlightAreas.filter((area) => flaggedLineSeverities.has(area.lineNumber));
 
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+    <div className="absolute inset-0">
       {highlights.map((area, index) => {
         const severity = flaggedLineSeverities.get(area.lineNumber) ?? "solid";
         const isActive = activeLineNumber === area.lineNumber;
 
         return (
-          <div
+          <button
+            type="button"
             key={`${area.lineNumber}-${index}`}
-            className={`absolute ${severityClass(severity, isActive)}`}
+            aria-label={`Show feedback for resume line ${area.lineNumber}`}
+            onClick={() => onHighlightSelect(area.lineNumber)}
+            className={`absolute cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/60 ${severityClass(severity, isActive)}`}
             style={{
               height: `${area.height * 100}%`,
               left: `${area.left * 100}%`,
@@ -940,10 +993,12 @@ function ResumeHighlights({
 function FeedbackItem({
   isActive,
   item,
+  onRef,
   onSelect,
 }: {
   isActive: boolean;
   item: Feedback;
+  onRef: (element: HTMLElement | null) => void;
   onSelect: () => void;
 }) {
   const severityTextClass =
@@ -961,6 +1016,7 @@ function FeedbackItem({
 
   return (
     <article
+      ref={onRef}
       role="button"
       tabIndex={0}
       onClick={onSelect}
