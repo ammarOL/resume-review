@@ -688,6 +688,7 @@ export default function ResumeReviewer() {
                     <NoDataEmptyState
                       description="Upload a resume to generate direct, section-level feedback. Issues will appear here after parsing."
                       imageSrc="/undraw_to-do-app_esjl.svg"
+                      imageSize="sm"
                       title="No feedback yet"
                     />
                   ) : analysis.feedback.length === 0 ? (
@@ -939,6 +940,7 @@ function ResumeImagePreview({
           <NoDataEmptyState
             description="Upload a PDF, DOCX, or text resume. The document preview will render here after parsing."
             imageSrc="/no-data.svg"
+            imageSize="md"
             title="No resume loaded"
           />
         )}
@@ -1093,13 +1095,17 @@ function FeedbackItem({
 
 function NoDataEmptyState({
   description,
+  imageSize,
   imageSrc,
   title,
 }: {
   description: string;
+  imageSize: "sm" | "md";
   imageSrc: string;
   title: string;
 }) {
+  const imageClassName = imageSize === "sm" ? "mb-5 h-auto w-28 opacity-80 sm:w-32" : "mb-5 h-auto w-40 opacity-80 sm:w-48";
+
   return (
     <div className="flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center bg-white px-6 py-8 text-center lg:min-h-[calc(100vh-4rem)]">
       <Image
@@ -1107,7 +1113,7 @@ function NoDataEmptyState({
         alt=""
         width={220}
         height={215}
-        className="mb-5 h-auto w-40 opacity-80 sm:w-48"
+        className={imageClassName}
       />
       <h3 className="text-base font-semibold">{title}</h3>
       <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{description}</p>
