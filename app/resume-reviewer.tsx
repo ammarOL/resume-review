@@ -381,16 +381,30 @@ export default function ResumeReviewer() {
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [selectedSeverity, setSelectedSeverity] = useState<Severity | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
+  const severityCounts = useMemo(
+    () =>
+      analysis.feedback.reduce<Record<Severity, number>>(
+        (counts, item) => {
+          counts[item.severity] += 1;
+          return counts;
+        },
+        { critical: 0, improve: 0, solid: 0 },
+      ),
+    [analysis.feedback],
+  );
   const feedbackGroups = useMemo<FeedbackGroup[]>(() => {
     const severityRank = { critical: 0, improve: 1, solid: 2 };
     const groups = new Map<string, Feedback[]>();
 
     for (const item of analysis.feedback) {
+      if (selectedSeverity && item.severity !== selectedSeverity) continue;
+
       const group = groups.get(item.section) ?? [];
       group.push(item);
       groups.set(item.section, group);
@@ -404,7 +418,7 @@ export default function ResumeReviewer() {
         ),
       }))
       .sort((a, b) => a.issues[0].lineNumber - b.issues[0].lineNumber);
-  }, [analysis.feedback]);
+  }, [analysis.feedback, selectedSeverity]);
 
   const hasResume = resumeText.trim().length > 0;
 
@@ -453,6 +467,7 @@ export default function ResumeReviewer() {
     setFileName("");
     setFileError("");
     setSelectedFileName("");
+    setSelectedSeverity(null);
     setIsParsingFile(false);
     setIsUploadOpen(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -463,6 +478,7 @@ export default function ResumeReviewer() {
     setPreviewImages(createResumePreviewImages(SAMPLE_RESUME, "sample-resume.txt"));
     setFileName("sample-resume.txt");
     setSelectedFileName("sample-resume.txt");
+    setSelectedSeverity(null);
     setFileError("");
     setIsUploadOpen(false);
   };
@@ -530,7 +546,11 @@ export default function ResumeReviewer() {
                 Clear
               </Button>
             </div>
-            <SeverityLegend />
+            <SeverityLegend
+              counts={severityCounts}
+              selectedSeverity={selectedSeverity}
+              setSelectedSeverity={setSelectedSeverity}
+            />
 
             <div>
               <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
@@ -542,6 +562,13 @@ export default function ResumeReviewer() {
                       <h3 className="font-semibold">No obvious issues found</h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         This heuristic pass did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
+                      </p>
+                    </div>
+                  ) : feedbackGroups.length === 0 ? (
+                    <div className="bg-white p-4">
+                      <h3 className="font-semibold">No issues at this severity</h3>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Clear the severity filter or choose another level to continue reviewing.
                       </p>
                     </div>
                   ) : (
@@ -569,18 +596,29 @@ export default function ResumeReviewer() {
   );
 }
 
-function SeverityLegend() {
+function SeverityLegend({
+  counts,
+  selectedSeverity,
+  setSelectedSeverity,
+}: {
+  counts: Record<Severity, number>;
+  selectedSeverity: Severity | null;
+  setSelectedSeverity: (severity: Severity | null) => void;
+}) {
   const levels = [
     {
       label: "Informative",
+      severity: "solid" as const,
       className: "border-[oklch(var(--info-line))] text-[oklch(var(--info-ink))]",
     },
     {
       label: "Improve",
+      severity: "improve" as const,
       className: "border-[oklch(var(--warning-line))] text-[oklch(var(--warning-ink))]",
     },
     {
       label: "Critical",
+      severity: "critical" as const,
       className: "border-[oklch(var(--danger-line))] text-[oklch(var(--danger-ink))]",
     },
   ];
@@ -590,13 +628,29 @@ function SeverityLegend() {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <p className="text-xs font-medium text-muted-foreground">Feedback severity</p>
         {levels.map((level) => (
-          <span
+          <button
+            type="button"
             key={level.label}
-            className={`border-l-2 pl-2 text-xs font-semibold ${level.className}`}
+            aria-pressed={selectedSeverity === level.severity}
+            disabled={counts[level.severity] === 0}
+            onClick={() =>
+              setSelectedSeverity(selectedSeverity === level.severity ? null : level.severity)
+            }
+            className={`border-l-2 pl-2 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:underline aria-pressed:underline-offset-4 ${level.className}`}
           >
             {level.label}
-          </span>
+            <span className="ml-1 font-medium text-muted-foreground">({counts[level.severity]})</span>
+          </button>
         ))}
+        {selectedSeverity ? (
+          <button
+            type="button"
+            onClick={() => setSelectedSeverity(null)}
+            className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+          >
+            Show all
+          </button>
+        ) : null}
       </div>
     </div>
   );
