@@ -954,19 +954,19 @@ function ResumeHighlights({
   const severityClass = (severity: Severity, isActive: boolean) => {
     if (severity === "critical") {
       return isActive
-        ? "bg-[oklch(0.78_0.16_26_/_0.72)] ring-1 ring-inset ring-[oklch(0.48_0.18_26_/_0.62)]"
-        : "bg-[oklch(0.86_0.08_26_/_0.1)]";
+        ? "bg-[oklch(0.82_0.12_26_/_0.48)] ring-1 ring-inset ring-[oklch(0.52_0.14_26_/_0.45)]"
+        : "bg-[oklch(0.72_0_0_/_0.16)]";
     }
 
     if (severity === "improve") {
       return isActive
-        ? "bg-[oklch(0.82_0.14_84_/_0.72)] ring-1 ring-inset ring-[oklch(0.48_0.12_84_/_0.62)]"
-        : "bg-[oklch(0.9_0.07_84_/_0.11)]";
+        ? "bg-[oklch(0.86_0.1_84_/_0.5)] ring-1 ring-inset ring-[oklch(0.55_0.1_84_/_0.45)]"
+        : "bg-[oklch(0.72_0_0_/_0.16)]";
     }
 
     return isActive
-      ? "bg-[oklch(0.78_0.1_250_/_0.66)] ring-1 ring-inset ring-[oklch(0.44_0.1_250_/_0.58)]"
-      : "bg-[oklch(0.86_0.06_250_/_0.09)]";
+      ? "bg-[oklch(0.84_0.075_250_/_0.46)] ring-1 ring-inset ring-[oklch(0.5_0.08_250_/_0.42)]"
+      : "bg-[oklch(0.72_0_0_/_0.16)]";
   };
   const highlights = Array.from(
     highlightAreas
