@@ -2,7 +2,7 @@
 
 import { ChangeEvent, DragEvent, RefObject, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { FileUp } from "lucide-react";
+import { FileUp, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -618,32 +618,43 @@ export default function ResumeReviewer() {
               Upload a resume, inspect the source document, and review direct section-level feedback.
             </p>
           </div>
-          <div className="relative">
-            <Button
-              type="button"
-              onClick={() => setIsUploadOpen((value) => !value)}
-              aria-expanded={isUploadOpen}
-              className="h-9 rounded-[2px] px-3"
+          <div className="flex items-center gap-2">
+            <a
+              href="https://github.com/ammarOL/resume-review"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[2px] border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring/45"
             >
-              <FileUp className="size-4" />
-              Add resume
-            </Button>
+              <Star className="size-4" />
+              Star on GitHub
+            </a>
+            <div className="relative">
+              <Button
+                type="button"
+                onClick={() => setIsUploadOpen((value) => !value)}
+                aria-expanded={isUploadOpen}
+                className="h-9 rounded-[2px] px-3"
+              >
+                <FileUp className="size-4" />
+                Add resume
+              </Button>
 
-            {isUploadOpen ? (
-              <div className="absolute right-0 z-20 mt-2 w-[min(92vw,420px)] rounded-[2px] border border-[oklch(var(--line-strong))] bg-white p-3">
-                <UploadDropzone
-                  fileError={fileError}
-                  handleDrop={handleDrop}
-                  handleFileChange={handleFileChange}
-                  inputRef={inputRef}
-                  isDragging={isDragging}
-                  isParsingFile={isParsingFile}
-                  loadSample={loadSample}
-                  selectedFileName={selectedFileName}
-                  setIsDragging={setIsDragging}
-                />
-              </div>
-            ) : null}
+              {isUploadOpen ? (
+                <div className="absolute right-0 z-20 mt-2 w-[min(92vw,420px)] rounded-[2px] border border-[oklch(var(--line-strong))] bg-white p-3">
+                  <UploadDropzone
+                    fileError={fileError}
+                    handleDrop={handleDrop}
+                    handleFileChange={handleFileChange}
+                    inputRef={inputRef}
+                    isDragging={isDragging}
+                    isParsingFile={isParsingFile}
+                    loadSample={loadSample}
+                    selectedFileName={selectedFileName}
+                    setIsDragging={setIsDragging}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 
@@ -1113,6 +1124,8 @@ function NoDataEmptyState({
         alt=""
         width={220}
         height={215}
+        loading="eager"
+        priority
         className={imageClassName}
       />
       <h3 className="text-base font-semibold">{title}</h3>
