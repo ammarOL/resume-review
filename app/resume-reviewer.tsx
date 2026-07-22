@@ -25,6 +25,11 @@ type SectionSummary = {
   critical: number;
 };
 
+type FeedbackGroup = {
+  section: string;
+  issues: Feedback[];
+};
+
 type ParsedResume = {
   text: string;
   previewImages: string[];
@@ -381,6 +386,25 @@ export default function ResumeReviewer() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
+  const feedbackGroups = useMemo<FeedbackGroup[]>(() => {
+    const severityRank = { critical: 0, improve: 1, solid: 2 };
+    const groups = new Map<string, Feedback[]>();
+
+    for (const item of analysis.feedback) {
+      const group = groups.get(item.section) ?? [];
+      group.push(item);
+      groups.set(item.section, group);
+    }
+
+    return Array.from(groups.entries())
+      .map(([section, issues]) => ({
+        section,
+        issues: issues.sort(
+          (a, b) => severityRank[a.severity] - severityRank[b.severity] || a.lineNumber - b.lineNumber,
+        ),
+      }))
+      .sort((a, b) => a.issues[0].lineNumber - b.issues[0].lineNumber);
+  }, [analysis.feedback]);
 
   const hasResume = resumeText.trim().length > 0;
 
@@ -513,30 +537,7 @@ export default function ResumeReviewer() {
               <Metric label="Critical" value={hasResume ? String(analysis.stats.critical) : "--"} />
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
-              <aside className="rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))] p-3">
-                <h2 className="text-sm font-semibold">Sections</h2>
-                <div className="mt-3 space-y-2">
-                  {hasResume && analysis.sections.length > 0 ? (
-                    analysis.sections.map((section) => (
-                      <div key={section.name} className="rounded-md bg-white px-3 py-2">
-                        <div className="flex items-center justify-between gap-2 text-sm font-semibold">
-                          <span>{section.name}</span>
-                          <span className="text-[oklch(var(--primary-deep))]">{section.issues}</span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {section.lineCount} lines, {section.critical} critical
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Resume sections will appear after you add content.
-                    </p>
-                  )}
-                </div>
-              </aside>
-
+            <div>
               <section className="min-h-[494px] rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
                 <div className="flex items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
                   <div>
@@ -561,12 +562,19 @@ export default function ResumeReviewer() {
                       </p>
                     </div>
                   ) : (
-                    analysis.feedback
-                      .sort((a, b) => {
-                        const severityRank = { critical: 0, improve: 1, solid: 2 };
-                        return severityRank[a.severity] - severityRank[b.severity] || a.lineNumber - b.lineNumber;
-                      })
-                      .map((item) => <FeedbackItem key={item.id} item={item} />)
+                    feedbackGroups.map((group) => (
+                      <section key={group.section} className="space-y-3">
+                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-md border border-[oklch(var(--line))] bg-white px-3 py-2">
+                          <h3 className="text-sm font-semibold">{group.section}</h3>
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {group.issues.length} issue{group.issues.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        {group.issues.map((item) => (
+                          <FeedbackItem key={item.id} item={item} />
+                        ))}
+                      </section>
+                    ))
                   )}
                 </div>
               </section>
