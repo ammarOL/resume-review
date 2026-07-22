@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { EB_Garamond, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const ebGaramond = EB_Garamond({
+const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
 });
@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("h-full", "antialiased", "font-sans", ebGaramond.variable, geistMono.variable)}
+      className={cn("h-full", "antialiased", "font-sans", plusJakartaSans.variable, geistMono.variable)}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
