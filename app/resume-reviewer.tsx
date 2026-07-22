@@ -1,7 +1,10 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, RefObject, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import { FileUp } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 type Severity = "critical" | "improve" | "solid";
 
@@ -375,6 +378,7 @@ export default function ResumeReviewer() {
   const [selectedFileName, setSelectedFileName] = useState("");
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
 
@@ -397,6 +401,7 @@ export default function ResumeReviewer() {
       setResumeText(parsed.text);
       setPreviewImages(parsed.previewImages);
       setFileName(file.name);
+      setIsUploadOpen(false);
     } catch {
       setFileName("");
       setPreviewImages([]);
@@ -425,21 +430,55 @@ export default function ResumeReviewer() {
     setFileError("");
     setSelectedFileName("");
     setIsParsingFile(false);
+    setIsUploadOpen(false);
     if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const loadSample = () => {
+    setResumeText(SAMPLE_RESUME);
+    setPreviewImages(createResumePreviewImages(SAMPLE_RESUME, "sample-resume.txt"));
+    setFileName("sample-resume.txt");
+    setSelectedFileName("sample-resume.txt");
+    setFileError("");
+    setIsUploadOpen(false);
   };
 
   return (
     <main className="min-h-screen bg-[oklch(var(--bg))] text-[oklch(var(--ink))]">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 border-b border-[oklch(var(--line))] pb-5 md:flex-row md:items-center md:justify-between">
+        <header className="relative flex flex-col gap-4 border-b border-[oklch(var(--line))] pb-5 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-[oklch(var(--primary-deep))]">Resume Reviewer</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
               Upload a resume. Get direct line-by-line criticism.
             </h1>
           </div>
-          <div className="rounded-md border border-[oklch(var(--success-line))] bg-[oklch(var(--success-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--success-ink))]">
-            Local only. No upload. No storage.
+          <div className="relative">
+            <Button
+              type="button"
+              onClick={() => setIsUploadOpen((value) => !value)}
+              aria-expanded={isUploadOpen}
+              className="h-10 px-3"
+            >
+              <FileUp className="size-4" />
+              Add resume
+            </Button>
+
+            {isUploadOpen ? (
+              <div className="absolute right-0 z-20 mt-2 w-[min(92vw,420px)] rounded-lg border border-[oklch(var(--line))] bg-white p-3 shadow-sm">
+                <UploadDropzone
+                  fileError={fileError}
+                  handleDrop={handleDrop}
+                  handleFileChange={handleFileChange}
+                  inputRef={inputRef}
+                  isDragging={isDragging}
+                  isParsingFile={isParsingFile}
+                  loadSample={loadSample}
+                  selectedFileName={selectedFileName}
+                  setIsDragging={setIsDragging}
+                />
+              </div>
+            ) : null}
           </div>
         </header>
 
@@ -451,87 +490,22 @@ export default function ResumeReviewer() {
           />
 
           <div className="flex min-h-[620px] flex-col gap-4">
-            <section className="rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))] p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold">Generation & Evaluation</h2>
-                  <p className="text-sm text-[oklch(var(--muted))]">
-                    Upload a resume and the parser generates critique from local text extraction.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setResumeText(SAMPLE_RESUME);
-                      setPreviewImages(createResumePreviewImages(SAMPLE_RESUME, "sample-resume.txt"));
-                      setFileName("sample-resume.txt");
-                      setSelectedFileName("sample-resume.txt");
-                      setFileError("");
-                    }}
-                    disabled={isParsingFile}
-                    className="h-9 rounded-md border border-[oklch(var(--line-strong))] px-3 text-sm font-semibold transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[oklch(var(--focus))] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Try sample
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearResume}
-                    disabled={isParsingFile || (!hasResume && !fileError)}
-                    className="h-9 rounded-md border border-[oklch(var(--line-strong))] px-3 text-sm font-semibold transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[oklch(var(--focus))] disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Clear
-                  </button>
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Generation & Evaluation</h2>
+                <p className="text-sm text-muted-foreground">
+                  {hasResume ? fileName : "Add a resume to generate feedback."}
+                </p>
               </div>
-
-              <label
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center transition ${
-                  isDragging
-                    ? "border-[oklch(var(--primary))] bg-[oklch(var(--primary-soft))]"
-                    : "border-[oklch(var(--line-strong))] bg-white hover:border-[oklch(var(--primary))]"
-                }`}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearResume}
+                disabled={isParsingFile || (!hasResume && !fileError)}
               >
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt,.md,.rtf,.csv,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv"
-                  className="sr-only"
-                  onChange={handleFileChange}
-                />
-                <span className="text-sm font-semibold">Drop a resume file here or choose one</span>
-                <span className="mt-1 text-sm text-[oklch(var(--muted))]">
-                  Supports PDF, DOCX, plain text, Markdown, RTF, CSV, or pasted content.
-                </span>
-                {selectedFileName ? (
-                  <span
-                    className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
-                      fileError
-                        ? "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]"
-                        : "bg-[oklch(var(--success-bg))] text-[oklch(var(--success-ink))]"
-                    }`}
-                  >
-                    {isParsingFile
-                      ? `Parsing: ${selectedFileName}`
-                      : fileError
-                        ? `Selected: ${selectedFileName}`
-                        : `Loaded: ${selectedFileName}`}
-                  </span>
-                ) : null}
-              </label>
-
-              {fileError ? (
-                <div className="mt-3 rounded-md border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
-                  {fileError}
-                </div>
-              ) : null}
-            </section>
+                Clear
+              </Button>
+            </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Metric label="Readiness" value={hasResume ? `${analysis.stats.score}%` : "--"} />
               <Metric label="Lines" value={hasResume ? String(analysis.stats.lines) : "--"} />
@@ -550,13 +524,13 @@ export default function ResumeReviewer() {
                           <span>{section.name}</span>
                           <span className="text-[oklch(var(--primary-deep))]">{section.issues}</span>
                         </div>
-                        <p className="mt-1 text-xs text-[oklch(var(--muted))]">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {section.lineCount} lines, {section.critical} critical
                         </p>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-[oklch(var(--muted))]">
+                    <p className="text-sm text-muted-foreground">
                       Resume sections will appear after you add content.
                     </p>
                   )}
@@ -567,11 +541,11 @@ export default function ResumeReviewer() {
                 <div className="flex items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
                   <div>
                     <h2 className="text-lg font-semibold">Feedback</h2>
-                    <p className="text-sm text-[oklch(var(--muted))]">
+                    <p className="text-sm text-muted-foreground">
                       Sorted by severity and original line number.
                     </p>
                   </div>
-                  <span className="rounded-full bg-[oklch(var(--accent))] px-3 py-1 text-xs font-semibold text-white">
+                  <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
                     {hasResume ? `${analysis.stats.issues} issues` : "Waiting"}
                   </span>
                 </div>
@@ -582,7 +556,7 @@ export default function ResumeReviewer() {
                   ) : analysis.feedback.length === 0 ? (
                     <div className="rounded-lg bg-white p-5">
                       <h3 className="font-semibold">No obvious issues found</h3>
-                      <p className="mt-2 text-sm leading-6 text-[oklch(var(--muted))]">
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         This heuristic pass did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
                       </p>
                     </div>
@@ -607,8 +581,87 @@ export default function ResumeReviewer() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))] p-3">
-      <p className="text-xs font-medium text-[oklch(var(--muted))]">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function UploadDropzone({
+  fileError,
+  handleDrop,
+  handleFileChange,
+  inputRef,
+  isDragging,
+  isParsingFile,
+  loadSample,
+  selectedFileName,
+  setIsDragging,
+}: {
+  fileError: string;
+  handleDrop: (event: DragEvent<HTMLLabelElement>) => void;
+  handleFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
+  isDragging: boolean;
+  isParsingFile: boolean;
+  loadSample: () => void;
+  selectedFileName: string;
+  setIsDragging: (value: boolean) => void;
+}) {
+  return (
+    <div>
+      <label
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center transition ${
+          isDragging
+            ? "border-primary bg-[oklch(var(--primary-soft))]"
+            : "border-[oklch(var(--line-strong))] bg-white hover:border-primary"
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.docx,.txt,.md,.rtf,.csv,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv"
+          className="sr-only"
+          onChange={handleFileChange}
+        />
+        <span className="text-sm font-semibold">Drop a resume file here or choose one</span>
+        <span className="mt-1 text-sm text-muted-foreground">
+          PDF, DOCX, plain text, Markdown, RTF, or CSV.
+        </span>
+        {selectedFileName ? (
+          <span
+            className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
+              fileError
+                ? "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]"
+                : "bg-[oklch(var(--success-bg))] text-[oklch(var(--success-ink))]"
+            }`}
+          >
+            {isParsingFile
+              ? `Parsing: ${selectedFileName}`
+              : fileError
+                ? `Selected: ${selectedFileName}`
+                : `Loaded: ${selectedFileName}`}
+          </span>
+        ) : null}
+      </label>
+
+      {fileError ? (
+        <div className="mt-3 rounded-md border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
+          {fileError}
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex justify-end">
+        <Button type="button" variant="outline" onClick={loadSample} disabled={isParsingFile}>
+          Try sample
+        </Button>
+      </div>
     </div>
   );
 }
@@ -627,11 +680,11 @@ function ResumeImagePreview({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
         <div>
           <h2 className="text-lg font-semibold">Resume Preview</h2>
-          <p className="text-sm text-[oklch(var(--muted))]">
+          <p className="text-sm text-muted-foreground">
             {fileName ? fileName : "The uploaded resume image appears here."}
           </p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[oklch(var(--muted))]">
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-muted-foreground">
           {previewImages.length > 0 ? `${previewImages.length} page${previewImages.length === 1 ? "" : "s"}` : "Waiting"}
         </span>
       </div>
@@ -649,7 +702,7 @@ function ResumeImagePreview({
                   unoptimized
                   className="h-auto w-full rounded-sm border border-[oklch(var(--line-strong))] bg-white"
                 />
-                <figcaption className="mt-2 text-center text-xs font-medium text-[oklch(var(--muted))]">
+                <figcaption className="mt-2 text-center text-xs font-medium text-muted-foreground">
                   Page {index + 1}
                 </figcaption>
               </figure>
@@ -658,14 +711,14 @@ function ResumeImagePreview({
         ) : isParsingFile ? (
           <div className="rounded-lg bg-white p-5">
             <h3 className="font-semibold">Rendering resume preview</h3>
-            <p className="mt-2 text-sm leading-6 text-[oklch(var(--muted))]">
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               The file is being parsed locally and converted into page images.
             </p>
           </div>
         ) : (
           <div className="rounded-lg bg-white p-5">
             <h3 className="font-semibold">Your resume will appear here</h3>
-            <p className="mt-2 text-sm leading-6 text-[oklch(var(--muted))]">
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Upload a PDF, DOCX, or text resume. PDFs render as real page images; DOCX and text files render as generated page previews.
             </p>
           </div>
@@ -687,7 +740,7 @@ function FeedbackItem({ item }: { item: Feedback }) {
         <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${severityClass}`}>
           {severityLabel(item.severity)}
         </span>
-        <span className="text-xs font-medium text-[oklch(var(--muted))]">
+        <span className="text-xs font-medium text-muted-foreground">
           {item.section} · line {item.lineNumber}
         </span>
       </div>
@@ -695,7 +748,7 @@ function FeedbackItem({ item }: { item: Feedback }) {
       <blockquote className="mt-2 border-l border-[oklch(var(--line-strong))] pl-3 font-mono text-sm leading-6 text-[oklch(var(--quote))]">
         {item.line}
       </blockquote>
-      <p className="mt-3 text-sm leading-6 text-[oklch(var(--muted))]">{item.detail}</p>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.detail}</p>
     </article>
   );
 }
@@ -704,7 +757,7 @@ function EmptyState() {
   return (
     <div className="rounded-lg bg-white p-5">
       <h3 className="font-semibold">Add a resume to start the critique</h3>
-      <p className="mt-2 text-sm leading-6 text-[oklch(var(--muted))]">
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
         The reviewer will flag vague bullets, missing metrics, soft action verbs, overloaded lines, and section-level weak spots.
       </p>
     </div>
