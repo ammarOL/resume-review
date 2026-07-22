@@ -382,11 +382,29 @@ export default function ResumeReviewer() {
   const [fileError, setFileError] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
   const [selectedSeverity, setSelectedSeverity] = useState<Severity | null>(null);
+  const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
+  const activeLineNumber = useMemo(() => {
+    if (!activeFeedbackId) return null;
+    return analysis.feedback.find((item) => item.id === activeFeedbackId)?.lineNumber ?? null;
+  }, [activeFeedbackId, analysis.feedback]);
+  const flaggedLineSeverities = useMemo(() => {
+    const severityRank = { critical: 0, improve: 1, solid: 2 };
+    const lines = new Map<number, Severity>();
+
+    for (const item of analysis.feedback) {
+      const current = lines.get(item.lineNumber);
+      if (!current || severityRank[item.severity] < severityRank[current]) {
+        lines.set(item.lineNumber, item.severity);
+      }
+    }
+
+    return lines;
+  }, [analysis.feedback]);
   const severityCounts = useMemo(
     () =>
       analysis.feedback.reduce<Record<Severity, number>>(
@@ -439,6 +457,7 @@ export default function ResumeReviewer() {
       setResumeText(parsed.text);
       setPreviewImages(parsed.previewImages);
       setFileName(file.name);
+      setActiveFeedbackId(null);
       setIsUploadOpen(false);
     } catch {
       setFileName("");
@@ -468,6 +487,7 @@ export default function ResumeReviewer() {
     setFileError("");
     setSelectedFileName("");
     setSelectedSeverity(null);
+    setActiveFeedbackId(null);
     setIsParsingFile(false);
     setIsUploadOpen(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -479,6 +499,7 @@ export default function ResumeReviewer() {
     setFileName("sample-resume.txt");
     setSelectedFileName("sample-resume.txt");
     setSelectedSeverity(null);
+    setActiveFeedbackId(null);
     setFileError("");
     setIsUploadOpen(false);
   };
@@ -524,8 +545,11 @@ export default function ResumeReviewer() {
 
         <section className="grid flex-1 gap-4 py-4 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
           <ResumeImagePreview
+            activeLineNumber={activeLineNumber}
+            flaggedLineSeverities={flaggedLineSeverities}
             isParsingFile={isParsingFile}
             previewImages={previewImages}
+            totalLines={analysis.stats.lines}
           />
 
           <div className="flex min-h-[620px] flex-col gap-3">
@@ -581,7 +605,12 @@ export default function ResumeReviewer() {
                           </span>
                         </div>
                         {group.issues.map((item) => (
-                          <FeedbackItem key={item.id} item={item} />
+                          <FeedbackItem
+                            key={item.id}
+                            isActive={activeFeedbackId === item.id}
+                            item={item}
+                            onSelect={() => setActiveFeedbackId(item.id)}
+                          />
                         ))}
                       </section>
                     ))
@@ -736,12 +765,20 @@ function UploadDropzone({
 }
 
 function ResumeImagePreview({
+  activeLineNumber,
+  flaggedLineSeverities,
   isParsingFile,
   previewImages,
+  totalLines,
 }: {
+  activeLineNumber: number | null;
+  flaggedLineSeverities: Map<number, Severity>;
   isParsingFile: boolean;
   previewImages: string[];
+  totalLines: number;
 }) {
+  const linesPerPage = Math.max(1, Math.ceil(Math.max(totalLines, 1) / Math.max(previewImages.length, 1)));
+
   return (
     <section className="top-4 rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))] lg:sticky lg:max-h-[calc(100vh-2rem)]">
       <div className="overflow-auto bg-[oklch(var(--preview-bg))] p-4 lg:max-h-[calc(100vh-2rem)]">
@@ -749,14 +786,22 @@ function ResumeImagePreview({
           <div className="space-y-5">
             {previewImages.map((src, index) => (
               <figure key={`${src.slice(0, 64)}-${index}`} className="mx-auto max-w-[760px]">
-                <Image
-                  src={src}
-                  alt={`Resume page ${index + 1}`}
-                  width={816}
-                  height={1056}
-                  unoptimized
-                  className="h-auto w-full border border-[oklch(var(--line-strong))] bg-white"
-                />
+                <div className="relative border border-[oklch(var(--line-strong))] bg-white">
+                  <Image
+                    src={src}
+                    alt={`Resume page ${index + 1}`}
+                    width={816}
+                    height={1056}
+                    unoptimized
+                    className="h-auto w-full"
+                  />
+                  <ResumeHighlights
+                    activeLineNumber={activeLineNumber}
+                    flaggedLineSeverities={flaggedLineSeverities}
+                    lineEnd={(index + 1) * linesPerPage}
+                    lineStart={index * linesPerPage + 1}
+                  />
+                </div>
                 <figcaption className="mt-2 text-center text-xs font-medium text-muted-foreground">
                   Page {index + 1}
                 </figcaption>
@@ -783,7 +828,60 @@ function ResumeImagePreview({
   );
 }
 
-function FeedbackItem({ item }: { item: Feedback }) {
+function ResumeHighlights({
+  activeLineNumber,
+  flaggedLineSeverities,
+  lineEnd,
+  lineStart,
+}: {
+  activeLineNumber: number | null;
+  flaggedLineSeverities: Map<number, Severity>;
+  lineEnd: number;
+  lineStart: number;
+}) {
+  const severityClass = (severity: Severity, isActive: boolean) => {
+    if (severity === "critical") {
+      return isActive ? "bg-[oklch(0.82_0.13_26_/_0.55)]" : "bg-[oklch(0.82_0.13_26_/_0.2)]";
+    }
+
+    if (severity === "improve") {
+      return isActive ? "bg-[oklch(0.86_0.11_84_/_0.55)]" : "bg-[oklch(0.86_0.11_84_/_0.22)]";
+    }
+
+    return isActive ? "bg-[oklch(0.82_0.08_250_/_0.5)]" : "bg-[oklch(0.82_0.08_250_/_0.18)]";
+  };
+  const pageLineCount = Math.max(1, lineEnd - lineStart + 1);
+  const highlights = Array.from(flaggedLineSeverities.entries()).filter(
+    ([lineNumber]) => lineNumber >= lineStart && lineNumber <= lineEnd,
+  );
+
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+      {highlights.map(([lineNumber, severity]) => {
+        const isActive = activeLineNumber === lineNumber;
+        const top = 7 + ((lineNumber - lineStart) / pageLineCount) * 86;
+
+        return (
+          <div
+            key={lineNumber}
+            className={`absolute left-[6.5%] right-[6.5%] h-[2.15%] ${severityClass(severity, isActive)}`}
+            style={{ top: `${top}%` }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function FeedbackItem({
+  isActive,
+  item,
+  onSelect,
+}: {
+  isActive: boolean;
+  item: Feedback;
+  onSelect: () => void;
+}) {
   const severityTextClass =
     item.severity === "critical"
       ? "text-[oklch(var(--danger-ink))]"
@@ -798,7 +896,20 @@ function FeedbackItem({ item }: { item: Feedback }) {
         : "bg-[oklch(var(--info-bg))]";
 
   return (
-    <article className={`border-b border-[oklch(var(--line))] px-4 py-3 last:border-b-0 ${severityBackgroundClass}`}>
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`cursor-pointer border-b border-[oklch(var(--line))] px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/60 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/45 ${
+        isActive ? "bg-white/75" : severityBackgroundClass
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className={`text-xs font-semibold ${severityTextClass}`}>{severityLabel(item.severity)}</span>
         <span className="text-xs font-medium text-muted-foreground">line {item.lineNumber}</span>
