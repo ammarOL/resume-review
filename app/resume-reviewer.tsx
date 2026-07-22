@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 
 type Severity = "critical" | "improve" | "solid";
 
@@ -19,6 +20,11 @@ type SectionSummary = {
   lineCount: number;
   issues: number;
   critical: number;
+};
+
+type ParsedResume = {
+  text: string;
+  previewImages: string[];
 };
 
 const SECTION_HEADERS = [
@@ -228,7 +234,65 @@ function getFileExtension(fileName: string) {
   return fileName.split(".").pop()?.toLowerCase() ?? "";
 }
 
-async function extractPdfText(file: File) {
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function wrapPreviewLine(line: string) {
+  if (line.length <= 82) return [line];
+
+  const words = line.split(" ");
+  const wrapped: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if (`${current} ${word}`.trim().length > 82) {
+      if (current) wrapped.push(current);
+      current = word;
+    } else {
+      current = `${current} ${word}`.trim();
+    }
+  }
+
+  if (current) wrapped.push(current);
+  return wrapped;
+}
+
+function createResumePreviewImages(text: string, title: string): string[] {
+  const normalizedLines = text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .flatMap((line) => wrapPreviewLine(line || " "));
+  const pages: string[] = [];
+  const linesPerPage = 48;
+
+  for (let start = 0; start < normalizedLines.length; start += linesPerPage) {
+    const pageLines = normalizedLines.slice(start, start + linesPerPage);
+    const textRows = pageLines
+      .map((line, index) => {
+        const y = 104 + index * 18;
+        const weight = index === 0 && start === 0 ? 700 : 400;
+        return `<text x="72" y="${y}" font-size="13" font-weight="${weight}" fill="oklch(0.205 0.018 62)">${escapeSvgText(line)}</text>`;
+      })
+      .join("");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="816" height="1056" viewBox="0 0 816 1056">
+      <rect width="816" height="1056" fill="white"/>
+      <rect x="0" y="0" width="816" height="8" fill="oklch(0.64 0.155 52)"/>
+      <text x="72" y="54" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="oklch(0.43 0.12 48)">${escapeSvgText(title)}</text>
+      <g font-family="Arial, sans-serif">${textRows}</g>
+    </svg>`;
+
+    pages.push(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+  }
+
+  return pages.length > 0 ? pages : createResumePreviewImages("No readable resume text found.", title);
+}
+
+async function parsePdfResume(file: File): Promise<ParsedResume> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     "pdfjs-dist/build/pdf.worker.mjs",
@@ -237,7 +301,8 @@ async function extractPdfText(file: File) {
 
   const data = new Uint8Array(await file.arrayBuffer());
   const pdf = await pdfjs.getDocument({ data }).promise;
-  const pages: string[] = [];
+  const textPages: string[] = [];
+  const previewImages: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
@@ -249,37 +314,62 @@ async function extractPdfText(file: File) {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
 
-    if (pageText) pages.push(pageText);
+    if (pageText) textPages.push(pageText);
+
+    const viewport = page.getViewport({ scale: 1.45 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    if (context) {
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+      previewImages.push(canvas.toDataURL("image/png"));
+    }
   }
 
-  return pages.join("\n\n");
+  return {
+    text: textPages.join("\n\n"),
+    previewImages,
+  };
 }
 
-async function extractDocxText(file: File) {
+async function parseDocxResume(file: File): Promise<ParsedResume> {
   const mammoth = await import("mammoth");
   const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-  return result.value.trim();
+  const text = result.value.trim();
+
+  return {
+    text,
+    previewImages: createResumePreviewImages(text, file.name),
+  };
 }
 
-async function extractResumeText(file: File) {
+async function parseResumeFile(file: File): Promise<ParsedResume> {
   const extension = getFileExtension(file.name);
 
   if (extension === "pdf" || file.type === "application/pdf") {
-    return extractPdfText(file);
+    return parsePdfResume(file);
   }
 
   if (
     extension === "docx" ||
     file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
-    return extractDocxText(file);
+    return parseDocxResume(file);
   }
 
-  return file.text();
+  const text = await file.text();
+
+  return {
+    text,
+    previewImages: createResumePreviewImages(text, file.name),
+  };
 }
 
 export default function ResumeReviewer() {
   const [resumeText, setResumeText] = useState("");
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
@@ -287,19 +377,6 @@ export default function ResumeReviewer() {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
-  const resumeLines = useMemo(() => resumeText.replace(/\r\n/g, "\n").split("\n"), [resumeText]);
-  const issueLines = useMemo(() => {
-    const severities = new Map<number, Severity>();
-
-    for (const item of analysis.feedback) {
-      const current = severities.get(item.lineNumber);
-      if (item.severity === "critical" || !current) {
-        severities.set(item.lineNumber, item.severity);
-      }
-    }
-
-    return severities;
-  }, [analysis.feedback]);
 
   const hasResume = resumeText.trim().length > 0;
 
@@ -309,17 +386,20 @@ export default function ResumeReviewer() {
     setIsParsingFile(true);
 
     try {
-      const text = await extractResumeText(file);
-      if (!text.trim()) {
+      const parsed = await parseResumeFile(file);
+      if (!parsed.text.trim()) {
         setFileName("");
+        setPreviewImages([]);
         setFileError(`${file.name} was selected, but no readable text was found in it.`);
         return;
       }
 
-      setResumeText(text);
+      setResumeText(parsed.text);
+      setPreviewImages(parsed.previewImages);
       setFileName(file.name);
     } catch {
       setFileName("");
+      setPreviewImages([]);
       setFileError(`${file.name} was selected, but I could not parse it locally. Try exporting it as PDF, DOCX, or plain text.`);
     } finally {
       setIsParsingFile(false);
@@ -340,6 +420,7 @@ export default function ResumeReviewer() {
 
   const clearResume = () => {
     setResumeText("");
+    setPreviewImages([]);
     setFileName("");
     setFileError("");
     setSelectedFileName("");
@@ -362,107 +443,95 @@ export default function ResumeReviewer() {
           </div>
         </header>
 
-        <section className="grid flex-1 gap-5 py-5 xl:grid-cols-[360px_minmax(360px,0.9fr)_minmax(420px,1fr)]">
-          <div className="flex min-h-[620px] flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">Resume Input</h2>
-                <p className="text-sm text-[oklch(var(--muted))]">
-                  Paste text or upload a text export. Data lives only in this tab&apos;s memory.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResumeText(SAMPLE_RESUME);
-                    setFileName("sample-resume.txt");
-                    setSelectedFileName("sample-resume.txt");
-                    setFileError("");
-                  }}
-                  disabled={isParsingFile}
-                  className="h-9 rounded-md border border-[oklch(var(--line-strong))] px-3 text-sm font-semibold transition hover:bg-[oklch(var(--surface))] focus:outline-none focus:ring-2 focus:ring-[oklch(var(--focus))]"
-                >
-                  Try sample
-                </button>
-                <button
-                  type="button"
-                  onClick={clearResume}
-                  disabled={isParsingFile || (!hasResume && !fileError)}
-                  className="h-9 rounded-md border border-[oklch(var(--line-strong))] px-3 text-sm font-semibold transition hover:bg-[oklch(var(--surface))] focus:outline-none focus:ring-2 focus:ring-[oklch(var(--focus))] disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <label
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center transition ${
-                isDragging
-                  ? "border-[oklch(var(--primary))] bg-[oklch(var(--primary-soft))]"
-                  : "border-[oklch(var(--line-strong))] bg-[oklch(var(--surface))] hover:border-[oklch(var(--primary))]"
-              }`}
-            >
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".pdf,.docx,.txt,.md,.rtf,.csv,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv"
-                className="sr-only"
-                onChange={handleFileChange}
-              />
-              <span className="text-sm font-semibold">Drop a resume file here or choose one</span>
-              <span className="mt-1 text-sm text-[oklch(var(--muted))]">
-                Supports PDF, DOCX, plain text, Markdown, RTF, CSV, or pasted content.
-              </span>
-              {selectedFileName ? (
-                <span
-                  className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
-                    fileError
-                      ? "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]"
-                      : "bg-[oklch(var(--success-bg))] text-[oklch(var(--success-ink))]"
-                  }`}
-                >
-                  {isParsingFile
-                    ? `Parsing: ${selectedFileName}`
-                    : fileError
-                      ? `Selected: ${selectedFileName}`
-                      : `Loaded: ${selectedFileName}`}
-                </span>
-              ) : null}
-            </label>
-
-            {fileError ? (
-              <div className="rounded-md border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
-                {fileError}
-              </div>
-            ) : null}
-
-            <textarea
-              value={resumeText}
-              onChange={(event) => {
-                setResumeText(event.target.value);
-                setFileName("");
-              }}
-              spellCheck={false}
-              placeholder="Paste resume text here..."
-              className="min-h-[430px] flex-1 resize-none rounded-lg border border-[oklch(var(--line))] bg-white p-4 font-mono text-sm leading-6 text-[oklch(var(--ink))] outline-none transition placeholder:text-[oklch(var(--placeholder))] focus:border-[oklch(var(--primary))] focus:ring-2 focus:ring-[oklch(var(--focus))]"
-            />
-          </div>
-
-          <ResumePreview
-            fileName={fileName}
-            hasResume={hasResume}
-            issueLines={issueLines}
-            lines={resumeLines}
+        <section className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(360px,0.95fr)_minmax(440px,1.05fr)]">
+          <ResumeImagePreview
+            fileName={fileName || selectedFileName}
+            isParsingFile={isParsingFile}
+            previewImages={previewImages}
           />
 
           <div className="flex min-h-[620px] flex-col gap-4">
+            <section className="rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Generation & Evaluation</h2>
+                  <p className="text-sm text-[oklch(var(--muted))]">
+                    Upload a resume and the parser generates critique from local text extraction.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResumeText(SAMPLE_RESUME);
+                      setPreviewImages(createResumePreviewImages(SAMPLE_RESUME, "sample-resume.txt"));
+                      setFileName("sample-resume.txt");
+                      setSelectedFileName("sample-resume.txt");
+                      setFileError("");
+                    }}
+                    disabled={isParsingFile}
+                    className="h-9 rounded-md border border-[oklch(var(--line-strong))] px-3 text-sm font-semibold transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[oklch(var(--focus))] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Try sample
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearResume}
+                    disabled={isParsingFile || (!hasResume && !fileError)}
+                    className="h-9 rounded-md border border-[oklch(var(--line-strong))] px-3 text-sm font-semibold transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[oklch(var(--focus))] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <label
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center transition ${
+                  isDragging
+                    ? "border-[oklch(var(--primary))] bg-[oklch(var(--primary-soft))]"
+                    : "border-[oklch(var(--line-strong))] bg-white hover:border-[oklch(var(--primary))]"
+                }`}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md,.rtf,.csv,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv"
+                  className="sr-only"
+                  onChange={handleFileChange}
+                />
+                <span className="text-sm font-semibold">Drop a resume file here or choose one</span>
+                <span className="mt-1 text-sm text-[oklch(var(--muted))]">
+                  Supports PDF, DOCX, plain text, Markdown, RTF, CSV, or pasted content.
+                </span>
+                {selectedFileName ? (
+                  <span
+                    className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold ${
+                      fileError
+                        ? "bg-[oklch(var(--warning-bg))] text-[oklch(var(--warning-ink))]"
+                        : "bg-[oklch(var(--success-bg))] text-[oklch(var(--success-ink))]"
+                    }`}
+                  >
+                    {isParsingFile
+                      ? `Parsing: ${selectedFileName}`
+                      : fileError
+                        ? `Selected: ${selectedFileName}`
+                        : `Loaded: ${selectedFileName}`}
+                  </span>
+                ) : null}
+              </label>
+
+              {fileError ? (
+                <div className="mt-3 rounded-md border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
+                  {fileError}
+                </div>
+              ) : null}
+            </section>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Metric label="Readiness" value={hasResume ? `${analysis.stats.score}%` : "--"} />
               <Metric label="Lines" value={hasResume ? String(analysis.stats.lines) : "--"} />
@@ -544,69 +613,60 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ResumePreview({
+function ResumeImagePreview({
   fileName,
-  hasResume,
-  issueLines,
-  lines,
+  isParsingFile,
+  previewImages,
 }: {
   fileName: string;
-  hasResume: boolean;
-  issueLines: Map<number, Severity>;
-  lines: string[];
+  isParsingFile: boolean;
+  previewImages: string[];
 }) {
   return (
     <section className="min-h-[620px] rounded-lg border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[oklch(var(--line))] px-4 py-3">
         <div>
-          <h2 className="text-lg font-semibold">Uploaded Resume</h2>
+          <h2 className="text-lg font-semibold">Resume Preview</h2>
           <p className="text-sm text-[oklch(var(--muted))]">
-            {fileName ? fileName : "Live preview with matching line numbers."}
+            {fileName ? fileName : "The uploaded resume image appears here."}
           </p>
         </div>
-        <div className="flex gap-2 text-xs font-semibold">
-          <span className="rounded-full border border-[oklch(var(--danger-line))] bg-[oklch(var(--danger-bg))] px-2.5 py-1 text-[oklch(var(--danger-ink))]">
-            Critical
-          </span>
-          <span className="rounded-full border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-2.5 py-1 text-[oklch(var(--warning-ink))]">
-            Improve
-          </span>
-        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[oklch(var(--muted))]">
+          {previewImages.length > 0 ? `${previewImages.length} page${previewImages.length === 1 ? "" : "s"}` : "Waiting"}
+        </span>
       </div>
 
-      <div className="max-h-[720px] overflow-auto p-3">
-        {hasResume ? (
-          <ol className="space-y-1 font-mono text-sm leading-6">
-            {lines.map((line, index) => {
-              const lineNumber = index + 1;
-              const severity = issueLines.get(lineNumber);
-              const rowClass =
-                severity === "critical"
-                  ? "border-[oklch(var(--danger-line))] bg-[oklch(var(--danger-bg))]"
-                  : severity === "improve"
-                    ? "border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))]"
-                    : "border-transparent bg-white";
-
-              return (
-                <li
-                  key={`${lineNumber}-${line}`}
-                  className={`grid grid-cols-[3rem_minmax(0,1fr)] rounded-md border px-2 py-1 ${rowClass}`}
-                >
-                  <span className="select-none text-right text-xs text-[oklch(var(--muted))]">
-                    {lineNumber}
-                  </span>
-                  <span className="min-h-6 whitespace-pre-wrap break-words pl-3 text-[oklch(var(--quote))]">
-                    {line || " "}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
+      <div className="max-h-[780px] overflow-auto bg-[oklch(var(--preview-bg))] p-4">
+        {previewImages.length > 0 ? (
+          <div className="space-y-5">
+            {previewImages.map((src, index) => (
+              <figure key={`${src.slice(0, 64)}-${index}`} className="mx-auto max-w-[760px]">
+                <Image
+                  src={src}
+                  alt={`Resume page ${index + 1}`}
+                  width={816}
+                  height={1056}
+                  unoptimized
+                  className="h-auto w-full rounded-sm border border-[oklch(var(--line-strong))] bg-white"
+                />
+                <figcaption className="mt-2 text-center text-xs font-medium text-[oklch(var(--muted))]">
+                  Page {index + 1}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        ) : isParsingFile ? (
+          <div className="rounded-lg bg-white p-5">
+            <h3 className="font-semibold">Rendering resume preview</h3>
+            <p className="mt-2 text-sm leading-6 text-[oklch(var(--muted))]">
+              The file is being parsed locally and converted into page images.
+            </p>
+          </div>
         ) : (
           <div className="rounded-lg bg-white p-5">
             <h3 className="font-semibold">Your resume will appear here</h3>
             <p className="mt-2 text-sm leading-6 text-[oklch(var(--muted))]">
-              Upload a text resume or paste it into the input panel. The preview stays visible while you compare feedback against the original lines.
+              Upload a PDF, DOCX, or text resume. PDFs render as real page images; DOCX and text files render as generated page previews.
             </p>
           </div>
         )}
