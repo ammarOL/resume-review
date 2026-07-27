@@ -3,6 +3,35 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import ResumeReviewer from "@/app/resume-reviewer";
 
+const savePdfMock = vi.fn();
+
+vi.mock("jspdf", () => ({
+  jsPDF: vi.fn(
+    function JsPDF() {
+      return {
+        addPage: vi.fn(),
+        internal: {
+          pageSize: {
+            getHeight: () => 792,
+            getWidth: () => 612,
+          },
+        },
+        line: vi.fn(),
+        rect: vi.fn(),
+        save: savePdfMock,
+        setDrawColor: vi.fn(),
+        setFillColor: vi.fn(),
+        setFont: vi.fn(),
+        setFontSize: vi.fn(),
+        setProperties: vi.fn(),
+        setTextColor: vi.fn(),
+        splitTextToSize: (text: string) => [text],
+        text: vi.fn(),
+      };
+    },
+  ),
+}));
+
 vi.mock("next/image", () => ({
   default: (props: React.ImgHTMLAttributes<HTMLImageElement> & { unoptimized?: boolean }) => {
     const { alt, unoptimized, ...imageProps } = props;
@@ -33,12 +62,6 @@ test("renders the resume reviewer work surface", () => {
 });
 
 test("keeps the severity filter active after selecting feedback", async () => {
-  const createObjectURL = vi.fn(() => "blob:resume-report");
-  const revokeObjectURL = vi.fn();
-  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-
-  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
-  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -98,9 +121,9 @@ test("keeps the severity filter active after selecting feedback", async () => {
 
   expect(screen.getByRole("button", { name: "Clear" })).toBeDefined();
   fireEvent.click(screen.getByRole("button", { name: "Download report" }));
-  expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-  expect(clickSpy).toHaveBeenCalled();
-  expect(revokeObjectURL).toHaveBeenCalledWith("blob:resume-report");
+  await waitFor(() => {
+    expect(savePdfMock).toHaveBeenCalledWith("resume-review-report.pdf");
+  });
   expect(container.querySelector('[aria-label="Resume rating 72 out of 100"]')).toBeDefined();
 
   if (!improveFilter) throw new Error("Improve filter was not found.");

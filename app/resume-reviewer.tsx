@@ -269,25 +269,10 @@ async function parseResumeFile(file: File): Promise<ParsedResume> {
   };
 }
 
-function escapeReportHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function reportSeverityLabel(severity: Severity) {
   if (severity === "critical") return "Critical";
   if (severity === "improve") return "Improve";
   return "Strength";
-}
-
-function reportSeverityClass(severity: Severity) {
-  if (severity === "critical") return "critical";
-  if (severity === "improve") return "improve";
-  return "solid";
 }
 
 function createFeedbackGroups(feedback: Feedback[]) {
@@ -310,20 +295,23 @@ function createFeedbackGroups(feedback: Feedback[]) {
     .sort((a, b) => a.issues[0].lineNumber - b.issues[0].lineNumber);
 }
 
-function createReviewReportHtml({
-  analysis,
-  resumeText,
-  title,
-}: {
-  analysis: AnalysisResult;
-  resumeText: string;
-  title: string;
-}) {
+function reportText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+async function downloadReviewReport(analysis: AnalysisResult, resumeText: string, selectedFileName: string) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const baseName = selectedFileName.trim().replace(/\.[^.]+$/, "") || "resume";
+  const safeBaseName = baseName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "resume";
   const generatedAt = new Intl.DateTimeFormat("en-US", {
     dateStyle: "long",
     timeStyle: "short",
   }).format(new Date());
-  const escapedTitle = escapeReportHtml(title);
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 48;
+  const contentWidth = pageWidth - margin * 2;
   const counts = analysis.feedback.reduce<Record<Severity, number>>(
     (totals, item) => {
       totals[item.severity] += 1;
@@ -331,123 +319,177 @@ function createReviewReportHtml({
     },
     { critical: 0, improve: 0, solid: 0 },
   );
-  const feedbackGroups = createFeedbackGroups(analysis.feedback);
-  const feedbackHtml = feedbackGroups.length
-    ? feedbackGroups
-        .map(
-          (group) => `<section class="section">
-  <div class="section-heading">
-    <h2>${escapeReportHtml(group.section)}</h2>
-    <span>${group.issues.length} item${group.issues.length === 1 ? "" : "s"}</span>
-  </div>
-  <div class="feedback-list">
-    ${group.issues
-      .map(
-        (item) => `<article class="feedback ${reportSeverityClass(item.severity)}">
-      <div class="feedback-meta">
-        <span class="badge ${reportSeverityClass(item.severity)}">${reportSeverityLabel(item.severity)}</span>
-        <span>Line ${item.lineNumber}</span>
-      </div>
-      <h3>${escapeReportHtml(item.title)}</h3>
-      <blockquote>${escapeReportHtml(item.line)}</blockquote>
-      <p>${escapeReportHtml(item.detail)}</p>
-    </article>`,
-      )
-      .join("")}
-  </div>
-</section>`,
-        )
-        .join("")
-    : `<section class="section empty"><h2>No obvious issues found</h2><p>This review did not identify specific feedback items.</p></section>`;
-  const resumeHtml = resumeText
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line, index) => `<tr><td>${index + 1}</td><td>${escapeReportHtml(line || " ")}</td></tr>`)
-    .join("");
 
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapedTitle}</title>
-  <style>
-    :root { --ink: #201f1d; --muted: #66615d; --line: #dedbd8; --surface: #fafafa; --critical: #8f2d23; --critical-bg: #fff1ef; --improve: #765300; --improve-bg: #fff7df; --solid: #245a84; --solid-bg: #edf6ff; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #f3f2f1; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
-    main { max-width: 980px; min-height: 100vh; margin: 0 auto; padding: 48px; background: white; }
-    header { margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
-    h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 30px; line-height: 1.15; letter-spacing: 0; }
-    h2 { font-size: 15px; line-height: 1.3; }
-    h3 { margin-top: 12px; font-size: 16px; line-height: 1.35; }
-    .subhead { margin-top: 8px; color: var(--muted); font-size: 14px; }
-    .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 28px 0; }
-    .metric { padding: 14px; background: var(--surface); border: 1px solid var(--line); }
-    .metric strong { display: block; font-size: 24px; line-height: 1; }
-    .metric span { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; }
-    .section { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
-    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
-    .section-heading span { color: var(--muted); font-size: 12px; white-space: nowrap; }
-    .feedback-list { display: grid; gap: 12px; }
-    .feedback { padding: 16px; background: white; border: 1px solid var(--line); }
-    .feedback.critical { background: var(--critical-bg); }
-    .feedback.improve { background: var(--improve-bg); }
-    .feedback.solid { background: var(--solid-bg); }
-    .feedback-meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 600; }
-    .badge { padding: 2px 7px; background: white; border: 1px solid currentColor; }
-    .badge.critical { color: var(--critical); }
-    .badge.improve { color: var(--improve); }
-    .badge.solid { color: var(--solid); }
-    blockquote { margin: 12px 0 0; padding-left: 12px; border-left: 1px solid var(--line); color: #36322f; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; white-space: pre-wrap; }
-    .feedback p, .empty p { margin-top: 12px; font-size: 14px; }
-    .resume-source { width: 100%; border-collapse: collapse; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; }
-    .resume-source td { padding: 6px 8px; border-top: 1px solid #ece9e6; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .resume-source td:first-child { width: 42px; color: var(--muted); text-align: right; user-select: none; }
-    @media print { body { background: white; } main { padding: 24px; } .feedback { break-inside: avoid; } }
-  </style>
-</head>
-<body>
-  <main>
-    <header>
-      <h1>${escapedTitle}</h1>
-      <p class="subhead">Generated ${escapeReportHtml(generatedAt)} from the AI resume review currently shown in Resume Reviewer.</p>
-    </header>
-    <section class="summary" aria-label="Report summary">
-      <div class="metric"><strong>${analysis.stats.score}</strong><span>Resume rating</span></div>
-      <div class="metric"><strong>${analysis.stats.issues}</strong><span>Total feedback</span></div>
-      <div class="metric"><strong>${counts.critical}</strong><span>Critical</span></div>
-      <div class="metric"><strong>${counts.improve}</strong><span>Improve</span></div>
-      <div class="metric"><strong>${counts.solid}</strong><span>Strengths</span></div>
-    </section>
-    ${feedbackHtml}
-    <section class="section">
-      <div class="section-heading"><h2>Resume Source</h2><span>${analysis.stats.lines} line${analysis.stats.lines === 1 ? "" : "s"}</span></div>
-      <table class="resume-source" aria-label="Numbered resume source"><tbody>${resumeHtml}</tbody></table>
-    </section>
-  </main>
-</body>
-</html>`;
-}
+  const setInk = () => doc.setTextColor(32, 31, 29);
+  const setMuted = () => doc.setTextColor(102, 97, 93);
+  const drawLine = (y: number) => {
+    doc.setDrawColor(222, 219, 216);
+    doc.line(margin, y, pageWidth - margin, y);
+  };
+  const ensureSpace = (needed: number, y: number) => {
+    if (y + needed <= pageHeight - margin) return y;
 
-function downloadReviewReport(analysis: AnalysisResult, resumeText: string, selectedFileName: string) {
-  const baseName = selectedFileName.trim().replace(/\.[^.]+$/, "") || "resume";
-  const safeBaseName = baseName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "resume";
-  const reportHtml = createReviewReportHtml({
-    analysis,
-    resumeText,
+    doc.addPage();
+    return margin;
+  };
+  const addWrappedText = ({
+    color = "ink",
+    font = "normal",
+    fontSize,
+    maxWidth = contentWidth,
+    text,
+    x = margin,
+    y,
+  }: {
+    color?: "ink" | "muted";
+    font?: "bold" | "normal";
+    fontSize: number;
+    maxWidth?: number;
+    text: string;
+    x?: number;
+    y: number;
+  }) => {
+    doc.setFont("helvetica", font);
+    doc.setFontSize(fontSize);
+    if (color === "muted") setMuted();
+    else setInk();
+
+    const lines = doc.splitTextToSize(text || " ", maxWidth) as string[];
+    doc.text(lines, x, y);
+    return y + lines.length * (fontSize + 4);
+  };
+
+  doc.setProperties({
     title: `${baseName} Resume Review Report`,
+    subject: "Resume review report",
+    creator: "Resume Reviewer",
   });
-  const blob = new Blob([reportHtml], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
 
-  link.href = url;
-  link.download = `${safeBaseName}-review-report.html`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  setInk();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(28);
+  doc.text(`${baseName} Resume Review Report`, margin, 66, { maxWidth: contentWidth });
+  setMuted();
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Generated ${generatedAt} from the AI resume review currently shown in Resume Reviewer.`, margin, 88, {
+    maxWidth: contentWidth,
+  });
+  drawLine(116);
+
+  const metricWidth = (contentWidth - 32) / 5;
+  const metricY = 140;
+  const metrics = [
+    { label: "Resume rating", value: `${analysis.stats.score}` },
+    { label: "Total feedback", value: `${analysis.stats.issues}` },
+    { label: "Critical", value: `${counts.critical}` },
+    { label: "Improve", value: `${counts.improve}` },
+    { label: "Strengths", value: `${counts.solid}` },
+  ];
+
+  metrics.forEach((metric, index) => {
+    const x = margin + index * (metricWidth + 8);
+    doc.setFillColor(250, 250, 250);
+    doc.setDrawColor(222, 219, 216);
+    doc.rect(x, metricY, metricWidth, 58, "FD");
+    setInk();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(21);
+    doc.text(metric.value, x + 12, metricY + 25);
+    setMuted();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(metric.label, x + 12, metricY + 43, { maxWidth: metricWidth - 24 });
+  });
+
+  let y = 230;
+  const groups = createFeedbackGroups(analysis.feedback);
+
+  if (groups.length === 0) {
+    y = addWrappedText({ font: "bold", fontSize: 14, text: "No obvious issues found", y });
+    addWrappedText({
+      color: "muted",
+      fontSize: 10,
+      text: "This review did not identify specific feedback items.",
+      y: y + 8,
+    });
+  }
+
+  for (const group of groups) {
+    y = ensureSpace(72, y);
+    drawLine(y);
+    y += 22;
+    y = addWrappedText({ font: "bold", fontSize: 14, text: group.section, y });
+    setMuted();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`${group.issues.length} item${group.issues.length === 1 ? "" : "s"}`, pageWidth - margin, y - 18, {
+      align: "right",
+    });
+    y += 8;
+
+    for (const item of group.issues) {
+      const detailLines = doc.splitTextToSize(reportText(item.detail), contentWidth - 32) as string[];
+      const lineLines = doc.splitTextToSize(item.line || " ", contentWidth - 56) as string[];
+      const itemHeight = 82 + detailLines.length * 13 + lineLines.length * 12;
+
+      y = ensureSpace(itemHeight, y);
+
+      if (item.severity === "critical") doc.setFillColor(255, 241, 239);
+      else if (item.severity === "improve") doc.setFillColor(255, 247, 223);
+      else doc.setFillColor(237, 246, 255);
+      doc.setDrawColor(222, 219, 216);
+      doc.rect(margin, y, contentWidth, itemHeight - 12, "FD");
+
+      setMuted();
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text(`${reportSeverityLabel(item.severity)}   Line ${item.lineNumber}`, margin + 16, y + 20);
+
+      y = addWrappedText({
+        font: "bold",
+        fontSize: 12,
+        maxWidth: contentWidth - 32,
+        text: reportText(item.title),
+        x: margin + 16,
+        y: y + 42,
+      });
+
+      setMuted();
+      doc.setFont("courier", "normal");
+      doc.setFontSize(9);
+      doc.text(lineLines, margin + 24, y + 8);
+      y += lineLines.length * 12 + 18;
+
+      y = addWrappedText({
+        fontSize: 10,
+        maxWidth: contentWidth - 32,
+        text: reportText(item.detail),
+        x: margin + 16,
+        y,
+      });
+      y += 18;
+    }
+  }
+
+  y = ensureSpace(76, y + 8);
+  drawLine(y);
+  y += 24;
+  y = addWrappedText({ font: "bold", fontSize: 14, text: "Resume Source", y });
+  y += 8;
+  doc.setFont("courier", "normal");
+  doc.setFontSize(8);
+  setMuted();
+
+  for (const [index, line] of resumeText.replace(/\r\n/g, "\n").split("\n").entries()) {
+    const numberedLine = `${String(index + 1).padStart(3, " ")}  ${line || " "}`;
+    const lines = doc.splitTextToSize(numberedLine, contentWidth) as string[];
+    y = ensureSpace(lines.length * 11 + 4, y);
+    doc.text(lines, margin, y);
+    y += lines.length * 11 + 2;
+  }
+
+  doc.save(`${safeBaseName}-review-report.pdf`);
 }
 
 export default function ResumeReviewer() {
