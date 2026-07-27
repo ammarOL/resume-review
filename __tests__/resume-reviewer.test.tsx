@@ -32,30 +32,76 @@ test("renders the resume reviewer work surface", () => {
 });
 
 test("keeps the severity filter active after selecting feedback", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("AI unavailable")));
-  vi.spyOn(console, "error").mockImplementation(() => {});
-  render(<ResumeReviewer />);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        feedback: [
+          {
+            id: "line-1",
+            section: "Summary",
+            lineNumber: 1,
+            line: "Responsible for various projects.",
+            severity: "critical",
+            title: "Weak or generic wording",
+            detail: "Replace vague responsibility language with a specific result.",
+          },
+          {
+            id: "line-2",
+            section: "Experience",
+            lineNumber: 2,
+            line: "- Worked on dashboards.",
+            severity: "improve",
+            title: "Bullet starts softly",
+            detail: "Start with a stronger action verb.",
+          },
+        ],
+        sections: [{ name: "Experience", lineCount: 1, issues: 1, critical: 0 }],
+        stats: { lines: 2, sections: 2, issues: 2, critical: 1, score: 72 },
+      }),
+    }),
+  );
+  const { container } = render(<ResumeReviewer />);
 
   fireEvent.click(screen.getByRole("button", { name: "Add resume" }));
-  fireEvent.click(screen.getByRole("button", { name: "Try sample" }));
+  expect(screen.queryByRole("button", { name: "Try sample" })).toBeNull();
+
+  const input = container.querySelector('input[type="file"]');
+  if (!input) throw new Error("Resume file input was not found.");
+
+  fireEvent.change(input, {
+    target: {
+      files: [
+        new File(["Responsible for various projects.\n- Worked on dashboards."], "resume.txt", {
+          type: "text/plain",
+        }),
+      ],
+    },
+  });
 
   let improveFilter: HTMLElement | undefined;
 
   await waitFor(() => {
     improveFilter = screen
       .getAllByRole("button")
-      .find((button) => /^Improve\s*\(\d+\)$/.test(button.textContent ?? ""));
+      .find((button) => /^Improve\s*\([1-9]\d*\)$/.test(button.textContent ?? ""));
     expect(improveFilter).toBeDefined();
   });
 
   expect(screen.getByRole("button", { name: "Clear" })).toBeDefined();
-  expect(screen.getByLabelText(/Resume rating \d+ out of 100/)).toBeDefined();
+  expect(container.querySelector('[aria-label="Resume rating 72 out of 100"]')).toBeDefined();
 
   if (!improveFilter) throw new Error("Improve filter was not found.");
   fireEvent.click(improveFilter);
-  const feedbackItem = screen
-    .getAllByRole("button")
-    .find((button) => button.textContent?.includes("Bullet starts softly"));
+  let feedbackItem: HTMLElement | undefined;
+
+  await waitFor(() => {
+    feedbackItem = screen
+      .getAllByRole("button")
+      .find((button) => button.textContent?.includes("Bullet starts softly"));
+    expect(feedbackItem).toBeDefined();
+  });
 
   if (!feedbackItem) throw new Error("Feedback item was not found.");
   fireEvent.click(feedbackItem);

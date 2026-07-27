@@ -57,73 +57,6 @@ type ParsedResume = {
   highlightAreas: HighlightArea[];
 };
 
-const SECTION_HEADERS = [
-  "summary",
-  "profile",
-  "experience",
-  "work experience",
-  "employment",
-  "projects",
-  "education",
-  "skills",
-  "certifications",
-  "awards",
-  "leadership",
-  "volunteering",
-];
-
-const WEAK_WORDS = [
-  "responsible for",
-  "helped",
-  "worked on",
-  "assisted",
-  "various",
-  "many",
-  "several",
-  "hard-working",
-  "team player",
-  "detail-oriented",
-  "passionate",
-];
-
-const ACTION_VERBS = [
-  "built",
-  "launched",
-  "led",
-  "owned",
-  "reduced",
-  "increased",
-  "improved",
-  "designed",
-  "shipped",
-  "managed",
-  "automated",
-  "created",
-  "delivered",
-  "analyzed",
-  "implemented",
-  "optimized",
-];
-
-const SAMPLE_RESUME = `Ammar Khan
-Software Engineer
-ammar@example.com | New York, NY
-
-Summary
-Hard-working software engineer responsible for building various web applications.
-
-Experience
-Software Engineer, Northstar Labs
-- Worked on internal dashboard features for operations teams.
-- Improved page load time by 38% by replacing blocking data fetches and removing unused client JavaScript.
-- Helped with bugs and assisted product managers with requirements.
-
-Projects
-- Resume Matcher: Built a local resume review workflow with section-level feedback.
-
-Skills
-React, Next.js, TypeScript, Tailwind CSS, Node.js`;
-
 const REVIEW_LOADING_MESSAGES = [
   "Loading review, hang tight.",
   "Reading for weak phrasing and missing proof.",
@@ -131,135 +64,17 @@ const REVIEW_LOADING_MESSAGES = [
   "Scoring the resume against practical hiring signals.",
 ];
 
-function getSectionName(line: string) {
-  const normalized = line.trim().toLowerCase().replace(/:$/, "");
-  return SECTION_HEADERS.includes(normalized) ? line.trim().replace(/:$/, "") : null;
-}
-
-function isContentLine(line: string) {
-  const trimmed = line.trim();
-  return trimmed.length > 0 && !getSectionName(trimmed);
-}
-
-function sentenceStartsWithAction(line: string) {
-  const clean = line.trim().replace(/^[-*•]\s*/, "").toLowerCase();
-  return ACTION_VERBS.some((verb) => clean.startsWith(`${verb} `));
-}
-
-function analyzeResume(text: string): AnalysisResult {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const feedback: Feedback[] = [];
-  const sections = new Map<string, SectionSummary>();
-  let currentSection = "Header";
-
-  const ensureSection = (name: string) => {
-    if (!sections.has(name)) {
-      sections.set(name, { name, lineCount: 0, issues: 0, critical: 0 });
-    }
-    return sections.get(name)!;
-  };
-
-  ensureSection(currentSection);
-
-  lines.forEach((line, index) => {
-    const lineNumber = index + 1;
-    const trimmed = line.trim();
-    const detectedSection = getSectionName(trimmed);
-
-    if (detectedSection) {
-      currentSection = detectedSection;
-      ensureSection(currentSection);
-      return;
-    }
-
-    if (!isContentLine(line)) return;
-
-    const section = ensureSection(currentSection);
-    section.lineCount += 1;
-    const lower = trimmed.toLowerCase();
-    const issueBase = {
-      section: currentSection,
-      lineNumber,
-      line: trimmed,
-    };
-
-    if (trimmed.length > 180) {
-      feedback.push({
-        ...issueBase,
-        id: `${lineNumber}-long`,
-        severity: "critical",
-        title: "Line is too dense",
-        detail:
-          "This tries to carry too much at once. Split the thought and lead with the strongest result.",
-      });
-    }
-
-    if (WEAK_WORDS.some((word) => lower.includes(word))) {
-      feedback.push({
-        ...issueBase,
-        id: `${lineNumber}-weak`,
-        severity: "critical",
-        title: "Weak or generic wording",
-        detail:
-          "Replace vague responsibility language with an action verb, scope, and outcome. The line should prove impact, not describe busyness.",
-      });
-    }
-
-    if ((currentSection.toLowerCase().includes("experience") || trimmed.startsWith("-")) && !/\d/.test(trimmed)) {
-      feedback.push({
-        ...issueBase,
-        id: `${lineNumber}-metric`,
-        severity: "improve",
-        title: "No measurable result",
-        detail:
-          "Add a number, scale, frequency, revenue, time saved, users affected, or quality signal so the claim has weight.",
-      });
-    }
-
-    if (trimmed.startsWith("-") && !sentenceStartsWithAction(trimmed)) {
-      feedback.push({
-        ...issueBase,
-        id: `${lineNumber}-verb`,
-        severity: "improve",
-        title: "Bullet starts softly",
-        detail:
-          "Start with a strong past-tense verb such as Built, Led, Reduced, Automated, Shipped, or Improved.",
-      });
-    }
-
-    if (lower.includes("objective")) {
-      feedback.push({
-        ...issueBase,
-        id: `${lineNumber}-objective`,
-        severity: "improve",
-        title: "Objective statements are usually weak",
-        detail:
-          "Use a compact summary of relevant strengths instead. Hiring readers care more about fit and evidence than your objective.",
-      });
-    }
-  });
-
-  for (const item of feedback) {
-    const section = ensureSection(item.section);
-    section.issues += 1;
-    if (item.severity === "critical") section.critical += 1;
-  }
-
-  const contentLines = lines.filter(isContentLine).length;
-  const score = Math.max(24, Math.min(96, 92 - feedback.length * 7 - feedback.filter((item) => item.severity === "critical").length * 6));
-
-  return {
-    feedback,
-    sections: Array.from(sections.values()).filter((section) => section.lineCount > 0),
-    stats: {
-      lines: contentLines,
-      sections: Array.from(sections.values()).filter((section) => section.name !== "Header").length,
-      issues: feedback.length,
-      critical: feedback.filter((item) => item.severity === "critical").length,
-      score,
-    },
-  };
-}
+const EMPTY_ANALYSIS: AnalysisResult = {
+  feedback: [],
+  sections: [],
+  stats: {
+    lines: 0,
+    sections: 0,
+    issues: 0,
+    critical: 0,
+    score: 0,
+  },
+};
 
 function severityLabel(severity: Severity) {
   if (severity === "critical") return "Critical";
@@ -471,8 +286,7 @@ export default function ResumeReviewer() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const feedbackItemRefs = useRef(new Map<string, HTMLElement>());
-  const fallbackAnalysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
-  const analysis = modelAnalysis ?? fallbackAnalysis;
+  const analysis = modelAnalysis ?? EMPTY_ANALYSIS;
 
   useEffect(() => {
     if (!resumeText.trim()) {
@@ -501,7 +315,7 @@ export default function ResumeReviewer() {
 
         console.error("Resume review failed", error);
         setModelAnalysis(null);
-        setReviewError("AI review is unavailable, so this is the local rule-based pass.");
+        setReviewError("AI review is unavailable. Check your API key or try the upload again.");
       } finally {
         if (!controller.signal.aborted) setIsReviewingResume(false);
       }
@@ -590,6 +404,7 @@ export default function ResumeReviewer() {
 
   const hasResume = resumeText.trim().length > 0;
   const isWaitingForModelReview = hasResume && isReviewingResume && !modelAnalysis;
+  const isReviewUnavailable = hasResume && !isReviewingResume && !modelAnalysis && Boolean(reviewError);
 
   const loadFile = async (file: File) => {
     setFileError("");
@@ -652,22 +467,6 @@ export default function ResumeReviewer() {
     setIsReviewingResume(false);
     setIsUploadOpen(false);
     if (inputRef.current) inputRef.current.value = "";
-  };
-
-  const loadSample = () => {
-    const previewData = createResumePreviewData(SAMPLE_RESUME, "sample-resume.txt");
-    setResumeText(SAMPLE_RESUME);
-    setPreviewImages(previewData.previewImages);
-    setHighlightAreas(previewData.highlightAreas);
-    setSelectedFileName("sample-resume.txt");
-    setSelectedSeverity(null);
-    setActiveFeedbackId(null);
-    setFileError("");
-    setReviewError("");
-    setModelAnalysis(null);
-    setReviewLoadingMessageIndex(0);
-    setIsReviewingResume(true);
-    setIsUploadOpen(false);
   };
 
   const selectFeedback = (feedbackId: string, shouldScroll = false) => {
@@ -742,7 +541,6 @@ export default function ResumeReviewer() {
                     inputRef={inputRef}
                     isDragging={isDragging}
                     isParsingFile={isParsingFile}
-                    loadSample={loadSample}
                     selectedFileName={selectedFileName}
                     setIsDragging={setIsDragging}
                   />
@@ -767,9 +565,9 @@ export default function ResumeReviewer() {
               <div>
                 <h2 className="text-base font-semibold">Generation & Evaluation</h2>
               </div>
-              {hasResume && !isWaitingForModelReview ? <ResumeScore score={analysis.stats.score} /> : null}
+              {modelAnalysis ? <ResumeScore score={modelAnalysis.stats.score} /> : null}
             </div>
-            {isWaitingForModelReview ? (
+            {isWaitingForModelReview || isReviewUnavailable ? (
               <div className="border-y border-[oklch(var(--line))] py-2" aria-hidden="true" />
             ) : (
               <SeverityLegend
@@ -798,6 +596,8 @@ export default function ResumeReviewer() {
                     <FeedbackLoadingState
                       message={REVIEW_LOADING_MESSAGES[reviewLoadingMessageIndex]}
                     />
+                  ) : isReviewUnavailable ? (
+                    <ReviewUnavailableState />
                   ) : analysis.feedback.length === 0 ? (
                     <div className="animate-[feedback-in_180ms_ease-out_both] bg-white p-4">
                       <h3 className="font-semibold">No obvious issues found</h3>
@@ -888,6 +688,17 @@ function FeedbackLoadingState({ message }: { message: string }) {
   );
 }
 
+function ReviewUnavailableState() {
+  return (
+    <div className="flex min-h-[494px] flex-col items-center justify-center bg-white px-6 py-12 text-center">
+      <h3 className="text-base font-semibold">Review unavailable</h3>
+      <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
+        The resume was parsed, but the AI review could not be generated. Check the API key and try uploading again.
+      </p>
+    </div>
+  );
+}
+
 function SeverityLegend({
   counts,
   selectedSeverity,
@@ -957,7 +768,6 @@ function UploadDropzone({
   inputRef,
   isDragging,
   isParsingFile,
-  loadSample,
   selectedFileName,
   setIsDragging,
 }: {
@@ -967,7 +777,6 @@ function UploadDropzone({
   inputRef: RefObject<HTMLInputElement | null>;
   isDragging: boolean;
   isParsingFile: boolean;
-  loadSample: () => void;
   selectedFileName: string;
   setIsDragging: (value: boolean) => void;
 }) {
@@ -1020,11 +829,6 @@ function UploadDropzone({
         </div>
       ) : null}
 
-      <div className="mt-3 flex justify-end">
-        <Button type="button" variant="outline" onClick={loadSample} disabled={isParsingFile} className="rounded-[2px]">
-          Try sample
-        </Button>
-      </div>
     </div>
   );
 }
