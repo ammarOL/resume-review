@@ -124,6 +124,11 @@ test("keeps the severity filter active after selecting feedback", async () => {
   });
 
   expect(screen.getByRole("button", { name: "Clear" })).toBeDefined();
+  expect(screen.getByText("Download before leaving")).toBeDefined();
+  expect(screen.getByText(/Closing or refreshing the tab will delete/)).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss data warning" }));
+  expect(screen.queryByText("Download before leaving")).toBeNull();
+
   fireEvent.click(screen.getByRole("button", { name: "Download report" }));
   await waitFor(() => {
     expect(savePdfMock).toHaveBeenCalledWith("resume-review-report.pdf");

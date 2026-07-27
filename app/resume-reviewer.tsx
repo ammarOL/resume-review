@@ -2,7 +2,7 @@
 
 import { ChangeEvent, DragEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Download, FileUp, Star, X } from "lucide-react";
+import { AlertTriangle, Download, FileUp, LoaderCircle, Star, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -617,7 +617,9 @@ export default function ResumeReviewer() {
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [isReviewingResume, setIsReviewingResume] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [reviewLoadingMessageIndex, setReviewLoadingMessageIndex] = useState(0);
+  const [isDataWarningDismissed, setIsDataWarningDismissed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -741,6 +743,21 @@ export default function ResumeReviewer() {
   const hasResume = resumeText.trim().length > 0;
   const isWaitingForModelReview = hasResume && isReviewingResume && !modelAnalysis;
   const isReviewUnavailable = hasResume && !isReviewingResume && !modelAnalysis && Boolean(reviewError);
+  const isBusyWithResume = isParsingFile || isWaitingForModelReview;
+  const shouldShowDataWarning = hasResume && Boolean(modelAnalysis) && !isDataWarningDismissed;
+
+  useEffect(() => {
+    if (!hasResume) return;
+
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasResume]);
 
   const loadFile = async (file: File) => {
     setFileError("");
@@ -760,6 +777,7 @@ export default function ResumeReviewer() {
       setModelAnalysis(null);
       setReviewError("");
       setReviewLoadingMessageIndex(0);
+      setIsDataWarningDismissed(false);
       setIsReviewingResume(true);
       setResumeText(parsed.text);
       setPreviewImages(parsed.previewImages);
@@ -796,6 +814,7 @@ export default function ResumeReviewer() {
     setReviewError("");
     setModelAnalysis(null);
     setReviewLoadingMessageIndex(0);
+    setIsDataWarningDismissed(false);
     setSelectedFileName("");
     setSelectedSeverity(null);
     setActiveFeedbackId(null);
@@ -803,6 +822,17 @@ export default function ResumeReviewer() {
     setIsReviewingResume(false);
     setIsUploadOpen(false);
     if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const handleDownloadReport = async () => {
+    if (!modelAnalysis || isDownloadingReport) return;
+
+    setIsDownloadingReport(true);
+    try {
+      await downloadReviewReport(modelAnalysis, selectedFileName, previewImages);
+    } finally {
+      setIsDownloadingReport(false);
+    }
   };
 
   const selectFeedback = (feedbackId: string, shouldScroll = false) => {
@@ -840,7 +870,7 @@ export default function ResumeReviewer() {
               href="https://github.com/ammarOL/resume-review"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[2px] border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring/45"
+              className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-[2px] border border-border bg-background px-3 text-sm font-medium transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
             >
               <Star className="size-4" />
               Star on GitHub
@@ -849,11 +879,17 @@ export default function ResumeReviewer() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => downloadReviewReport(modelAnalysis, selectedFileName, previewImages)}
+                onClick={handleDownloadReport}
+                disabled={isDownloadingReport}
+                aria-busy={isDownloadingReport}
                 className="h-9 rounded-[2px] px-3"
               >
-                <Download className="size-4" />
-                Download report
+                {isDownloadingReport ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
+                {isDownloadingReport ? "Preparing" : "Download report"}
               </Button>
             ) : null}
             {hasResume ? (
@@ -861,11 +897,16 @@ export default function ResumeReviewer() {
                 type="button"
                 variant="outline"
                 onClick={clearResume}
-                disabled={isParsingFile}
+                disabled={isBusyWithResume}
+                aria-busy={isBusyWithResume}
                 className="h-9 rounded-[2px] px-3"
               >
-                <X className="size-4" />
-                Clear
+                {isBusyWithResume ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <X className="size-4" />
+                )}
+                {isBusyWithResume ? "Reviewing" : "Clear"}
               </Button>
             ) : null}
             <div className="relative">
@@ -873,10 +914,16 @@ export default function ResumeReviewer() {
                 type="button"
                 onClick={() => setIsUploadOpen((value) => !value)}
                 aria-expanded={isUploadOpen}
+                aria-busy={isBusyWithResume}
+                disabled={isBusyWithResume}
                 className="h-9 rounded-[2px] px-3"
               >
-                <FileUp className="size-4" />
-                Add resume
+                {isBusyWithResume ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <FileUp className="size-4" />
+                )}
+                {isParsingFile ? "Parsing" : isWaitingForModelReview ? "Reviewing" : "Add resume"}
               </Button>
 
               {isUploadOpen ? (
@@ -914,6 +961,13 @@ export default function ResumeReviewer() {
               </div>
               {modelAnalysis ? <ResumeScore score={modelAnalysis.stats.score} /> : null}
             </div>
+            {shouldShowDataWarning ? (
+              <DataRetentionWarning
+                isDownloadingReport={isDownloadingReport}
+                onDismiss={() => setIsDataWarningDismissed(true)}
+                onDownload={handleDownloadReport}
+              />
+            ) : null}
             {isWaitingForModelReview || isReviewUnavailable ? (
               <div className="border-y border-[oklch(var(--line))] py-2" aria-hidden="true" />
             ) : (
@@ -997,6 +1051,61 @@ export default function ResumeReviewer() {
         </section>
       </div>
     </main>
+  );
+}
+
+function DataRetentionWarning({
+  isDownloadingReport,
+  onDismiss,
+  onDownload,
+}: {
+  isDownloadingReport: boolean;
+  onDismiss: () => void;
+  onDownload: () => void;
+}) {
+  return (
+    <section
+      role="status"
+      aria-live="polite"
+      className="animate-[feedback-in_180ms_ease-out_both] rounded-[2px] border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-3 text-[oklch(var(--warning-ink))]"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-2.5">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <div>
+            <h3 className="text-sm font-semibold">Download before leaving</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-5">
+              This review is only stored in this browser tab. Closing or refreshing the tab will delete the uploaded resume and generated feedback.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 self-start">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onDownload}
+            disabled={isDownloadingReport}
+            aria-busy={isDownloadingReport}
+            className="h-8 border-[oklch(var(--warning-line))] bg-white/70 px-2.5 text-[oklch(var(--warning-ink))] hover:bg-white"
+          >
+            {isDownloadingReport ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <Download className="size-3.5" />
+            )}
+            {isDownloadingReport ? "Preparing" : "Download PDF"}
+          </Button>
+          <button
+            type="button"
+            aria-label="Dismiss data warning"
+            onClick={onDismiss}
+            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-[2px] text-[oklch(var(--warning-ink))] transition hover:bg-white/70 focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1087,7 +1196,7 @@ function SeverityLegend({
               onClick={() =>
                 setSelectedSeverity(selectedSeverity === level.severity ? null : level.severity)
               }
-              className={`border-l-2 pl-2 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:underline aria-pressed:underline-offset-4 ${level.className}`}
+              className={`cursor-pointer border-l-2 pl-2 text-left text-xs font-semibold transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:underline aria-pressed:underline-offset-4 ${level.className}`}
             >
               {level.label}
               <span className="ml-1 font-medium text-muted-foreground">({counts[level.severity]})</span>
@@ -1098,7 +1207,7 @@ function SeverityLegend({
           <button
             type="button"
             onClick={() => setSelectedSeverity(null)}
-            className="ml-auto text-xs font-medium text-muted-foreground underline underline-offset-4"
+            className="ml-auto cursor-pointer text-xs font-medium text-muted-foreground underline underline-offset-4 transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
           >
             Show all
           </button>
@@ -1131,15 +1240,27 @@ function UploadDropzone({
     <div>
       <label
         onDragOver={(event) => {
+          if (isParsingFile) return;
           event.preventDefault();
           setIsDragging(true);
         }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-[2px] border border-dashed px-4 py-6 text-center transition ${
-          isDragging
-            ? "border-primary bg-[oklch(var(--primary-soft))]"
-            : "border-[oklch(var(--line-strong))] bg-white hover:border-primary"
+        onDragLeave={() => {
+          if (!isParsingFile) setIsDragging(false);
+        }}
+        onDrop={(event) => {
+          if (isParsingFile) {
+            event.preventDefault();
+            return;
+          }
+          handleDrop(event);
+        }}
+        aria-disabled={isParsingFile}
+        className={`flex flex-col items-center justify-center rounded-[2px] border border-dashed px-4 py-6 text-center transition ${
+          isParsingFile
+            ? "cursor-not-allowed border-[oklch(var(--line))] bg-[oklch(var(--muted))] opacity-75"
+            : isDragging
+              ? "cursor-pointer border-primary bg-[oklch(var(--primary-soft))]"
+              : "cursor-pointer border-[oklch(var(--line-strong))] bg-white hover:border-primary"
         }`}
       >
         <input
@@ -1148,6 +1269,7 @@ function UploadDropzone({
           accept=".pdf,.docx,.txt,.md,.rtf,.csv,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv"
           className="sr-only"
           onChange={handleFileChange}
+          disabled={isParsingFile}
         />
         <span className="text-sm font-semibold">Drop a resume file here or choose one</span>
         <span className="mt-1 text-sm text-muted-foreground">
