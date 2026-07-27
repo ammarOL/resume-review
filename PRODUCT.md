@@ -10,7 +10,7 @@ Anyone who wants a direct, useful review of their resume before applying, sharin
 
 ## Product Purpose
 
-Resume Reviewer lets a user upload or paste resume text and receive critical feedback by section and line. Success means the user can see what is weak, why it is weak, and what to rewrite without sending the resume to a server or creating an account.
+Resume Reviewer lets a user upload or paste resume text and receive critical feedback by section and line. Success means the user can see what is weak, why it is weak, and what to rewrite without creating an account or storing resume data.
 
 ## Brand Personality
 
@@ -22,7 +22,7 @@ Avoid soft motivational coaching, generic AI chatbot framing, decorative SaaS la
 
 ## Design Principles
 
-- Make privacy visible and literal: the resume stays in browser memory and disappears when the tab closes.
+- Make privacy visible and literal: resume files are parsed in browser memory, extracted text is sent only for the AI review request, and browser state disappears when the tab closes.
 - Lead with the work surface, not persuasion.
 - Give feedback at the smallest useful unit: section, line, and specific rewrite direction.
 - Be critical without being vague; every issue should explain the concrete weakness.
@@ -30,4 +30,4 @@ Avoid soft motivational coaching, generic AI chatbot framing, decorative SaaS la
 
 ## Accessibility & Inclusion
 
-Target WCAG AA contrast and keyboard-operable controls. Do not rely on color alone for severity. Respect reduced-motion preferences. Keep all resume content local to the browser session and avoid persistent storage.
+Target WCAG AA contrast and keyboard-operable controls. Do not rely on color alone for severity. Respect reduced-motion preferences. Avoid persistent storage and be explicit when extracted resume text is sent for AI review.

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, RefObject, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { FileUp, Star } from "lucide-react";
 
@@ -28,6 +28,18 @@ type SectionSummary = {
 type FeedbackGroup = {
   section: string;
   issues: Feedback[];
+};
+
+type AnalysisResult = {
+  feedback: Feedback[];
+  sections: SectionSummary[];
+  stats: {
+    lines: number;
+    sections: number;
+    issues: number;
+    critical: number;
+    score: number;
+  };
 };
 
 type HighlightArea = {
@@ -127,7 +139,7 @@ function sentenceStartsWithAction(line: string) {
   return ACTION_VERBS.some((verb) => clean.startsWith(`${verb} `));
 }
 
-function analyzeResume(text: string) {
+function analyzeResume(text: string): AnalysisResult {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const feedback: Feedback[] = [];
   const sections = new Map<string, SectionSummary>();
@@ -441,15 +453,57 @@ export default function ResumeReviewer() {
   const [highlightAreas, setHighlightAreas] = useState<HighlightArea[]>([]);
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [modelAnalysis, setModelAnalysis] = useState<AnalysisResult | null>(null);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [selectedSeverity, setSelectedSeverity] = useState<Severity | null>(null);
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
+  const [isReviewingResume, setIsReviewingResume] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const feedbackItemRefs = useRef(new Map<string, HTMLElement>());
-  const analysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
+  const fallbackAnalysis = useMemo(() => analyzeResume(resumeText), [resumeText]);
+  const analysis = modelAnalysis ?? fallbackAnalysis;
+
+  useEffect(() => {
+    if (!resumeText.trim()) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function generateReview() {
+      try {
+        const response = await fetch("/api/review-resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resumeText }),
+          signal: controller.signal,
+        });
+        const result = (await response.json()) as AnalysisResult | { error?: string };
+
+        if (!response.ok) {
+          throw new Error("error" in result && result.error ? result.error : "Review request failed.");
+        }
+
+        setModelAnalysis(result as AnalysisResult);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+
+        console.error("Resume review failed", error);
+        setModelAnalysis(null);
+        setReviewError("AI review is unavailable, so this is the local rule-based pass.");
+      } finally {
+        if (!controller.signal.aborted) setIsReviewingResume(false);
+      }
+    }
+
+    void generateReview();
+
+    return () => controller.abort();
+  }, [resumeText]);
   const activeLineNumber = useMemo(() => {
     if (!activeFeedbackId) return null;
     return analysis.feedback.find((item) => item.id === activeFeedbackId)?.lineNumber ?? null;
@@ -529,9 +583,13 @@ export default function ResumeReviewer() {
         setPreviewImages([]);
         setHighlightAreas([]);
         setFileError(`${file.name} was selected, but no readable text was found in it.`);
+        setIsReviewingResume(false);
         return;
       }
 
+      setModelAnalysis(null);
+      setReviewError("");
+      setIsReviewingResume(true);
       setResumeText(parsed.text);
       setPreviewImages(parsed.previewImages);
       setHighlightAreas(parsed.highlightAreas);
@@ -543,6 +601,7 @@ export default function ResumeReviewer() {
       setPreviewImages([]);
       setHighlightAreas([]);
       setFileError(`${file.name} was selected, but I could not parse it locally. Try exporting it as PDF, DOCX, or plain text.`);
+      setIsReviewingResume(false);
     } finally {
       setIsParsingFile(false);
     }
@@ -566,10 +625,13 @@ export default function ResumeReviewer() {
     setHighlightAreas([]);
     setFileName("");
     setFileError("");
+    setReviewError("");
+    setModelAnalysis(null);
     setSelectedFileName("");
     setSelectedSeverity(null);
     setActiveFeedbackId(null);
     setIsParsingFile(false);
+    setIsReviewingResume(false);
     setIsUploadOpen(false);
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -584,6 +646,9 @@ export default function ResumeReviewer() {
     setSelectedSeverity(null);
     setActiveFeedbackId(null);
     setFileError("");
+    setReviewError("");
+    setModelAnalysis(null);
+    setIsReviewingResume(true);
     setIsUploadOpen(false);
   };
 
@@ -673,7 +738,13 @@ export default function ResumeReviewer() {
               <div>
                 <h2 className="text-base font-semibold">Generation & Evaluation</h2>
                 <p className="text-sm text-muted-foreground">
-                  {hasResume ? fileName : "Add a resume to generate feedback."}
+                  {hasResume
+                    ? isReviewingResume
+                      ? "Generating AI feedback..."
+                      : modelAnalysis
+                        ? `${fileName} reviewed with OpenAI`
+                        : fileName
+                    : "Add a resume to generate feedback."}
                 </p>
               </div>
               <Button
@@ -691,6 +762,11 @@ export default function ResumeReviewer() {
               selectedSeverity={selectedSeverity}
               setSelectedSeverity={setSelectedSeverity}
             />
+            {reviewError ? (
+              <div className="rounded-[2px] border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
+                {reviewError}
+              </div>
+            ) : null}
 
             <div>
               <section className="min-h-[494px] rounded-[2px] border border-[oklch(var(--line))] bg-[oklch(var(--surface))]">
@@ -702,11 +778,18 @@ export default function ResumeReviewer() {
                       imageSize="sm"
                       title="No feedback yet"
                     />
+                  ) : isReviewingResume && !modelAnalysis ? (
+                    <div className="bg-white p-4">
+                      <h3 className="font-semibold">Generating AI feedback</h3>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        The resume text has been parsed locally and is being reviewed with OpenAI.
+                      </p>
+                    </div>
                   ) : analysis.feedback.length === 0 ? (
                     <div className="bg-white p-4">
                       <h3 className="font-semibold">No obvious issues found</h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        This heuristic pass did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
+                        This review did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
                       </p>
                     </div>
                   ) : feedbackGroups.length === 0 ? (
