@@ -2,7 +2,7 @@
 
 import { ChangeEvent, DragEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { FileUp, Star } from "lucide-react";
+import { FileUp, Star, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -692,6 +692,18 @@ export default function ResumeReviewer() {
               <Star className="size-4" />
               Star on GitHub
             </a>
+            {hasResume ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearResume}
+                disabled={isParsingFile}
+                className="h-9 rounded-[2px] px-3"
+              >
+                <X className="size-4" />
+                Clear
+              </Button>
+            ) : null}
             <div className="relative">
               <Button
                 type="button"
@@ -746,15 +758,7 @@ export default function ResumeReviewer() {
                     : "Add a resume to generate feedback."}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={clearResume}
-                disabled={isParsingFile || (!hasResume && !fileError)}
-                className="rounded-[2px]"
-              >
-                Clear
-              </Button>
+              {hasResume ? <ResumeScore score={analysis.stats.score} /> : null}
             </div>
             <SeverityLegend
               counts={severityCounts}
@@ -832,6 +836,21 @@ export default function ResumeReviewer() {
         </section>
       </div>
     </main>
+  );
+}
+
+function ResumeScore({ score }: { score: number }) {
+  return (
+    <div
+      aria-label={`Resume rating ${score} out of 100`}
+      className="min-w-28 rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2 text-right"
+    >
+      <p className="text-xs font-medium text-muted-foreground">Resume rating</p>
+      <p className="mt-0.5 text-lg font-semibold leading-none text-[oklch(var(--ink))]">
+        {score}
+        <span className="text-xs font-medium text-muted-foreground">/100</span>
+      </p>
+    </div>
   );
 }
 

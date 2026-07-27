@@ -18,6 +18,7 @@ vi.mock("next/image", () => ({
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 test("renders the resume reviewer work surface", () => {
@@ -25,12 +26,14 @@ test("renders the resume reviewer work surface", () => {
 
   expect(screen.getByRole("heading", { level: 1, name: "Resume Reviewer" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Add resume" })).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
   expect(screen.getByText("No resume loaded")).toBeDefined();
   expect(screen.getByText("No feedback yet")).toBeDefined();
 });
 
 test("keeps the severity filter active after selecting feedback", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("AI unavailable")));
+  vi.spyOn(console, "error").mockImplementation(() => {});
   render(<ResumeReviewer />);
 
   fireEvent.click(screen.getByRole("button", { name: "Add resume" }));
@@ -44,6 +47,9 @@ test("keeps the severity filter active after selecting feedback", async () => {
       .find((button) => /^Improve\s*\(\d+\)$/.test(button.textContent ?? ""));
     expect(improveFilter).toBeDefined();
   });
+
+  expect(screen.getByRole("button", { name: "Clear" })).toBeDefined();
+  expect(screen.getByLabelText(/Resume rating \d+ out of 100/)).toBeDefined();
 
   if (!improveFilter) throw new Error("Improve filter was not found.");
   fireEvent.click(improveFilter);
