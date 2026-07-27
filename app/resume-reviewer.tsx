@@ -963,9 +963,7 @@ export default function ResumeReviewer() {
             </div>
             {shouldShowDataWarning ? (
               <DataRetentionWarning
-                isDownloadingReport={isDownloadingReport}
                 onDismiss={() => setIsDataWarningDismissed(true)}
-                onDownload={handleDownloadReport}
               />
             ) : null}
             {isWaitingForModelReview || isReviewUnavailable ? (
@@ -1054,56 +1052,31 @@ export default function ResumeReviewer() {
   );
 }
 
-function DataRetentionWarning({
-  isDownloadingReport,
-  onDismiss,
-  onDownload,
-}: {
-  isDownloadingReport: boolean;
-  onDismiss: () => void;
-  onDownload: () => void;
-}) {
+function DataRetentionWarning({ onDismiss }: { onDismiss: () => void }) {
   return (
     <section
       role="status"
       aria-live="polite"
-      className="animate-[feedback-in_180ms_ease-out_both] rounded-[2px] border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-3 text-[oklch(var(--warning-ink))]"
+      className="animate-[feedback-in_180ms_ease-out_both] rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2 text-muted-foreground"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-2.5">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex gap-2">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[oklch(var(--placeholder))]" aria-hidden="true" />
           <div>
-            <h3 className="text-sm font-semibold">Download before leaving</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-5">
+            <h3 className="text-xs font-semibold text-[oklch(var(--ink))]">Download before leaving</h3>
+            <p className="mt-0.5 max-w-2xl text-xs leading-5">
               This review is only stored in this browser tab. Closing or refreshing the tab will delete the uploaded resume and generated feedback.
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-start">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onDownload}
-            disabled={isDownloadingReport}
-            aria-busy={isDownloadingReport}
-            className="h-8 border-[oklch(var(--warning-line))] bg-white/70 px-2.5 text-[oklch(var(--warning-ink))] hover:bg-white"
-          >
-            {isDownloadingReport ? (
-              <LoaderCircle className="size-3.5 animate-spin" />
-            ) : (
-              <Download className="size-3.5" />
-            )}
-            {isDownloadingReport ? "Preparing" : "Download PDF"}
-          </Button>
-          <button
-            type="button"
-            aria-label="Dismiss data warning"
-            onClick={onDismiss}
-            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-[2px] text-[oklch(var(--warning-ink))] transition hover:bg-white/70 focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+        <button
+          type="button"
+          aria-label="Dismiss data warning"
+          onClick={onDismiss}
+          className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[2px] text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
+        >
+          <X className="size-3.5" />
+        </button>
       </div>
     </section>
   );
