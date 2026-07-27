@@ -299,7 +299,11 @@ function reportText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-async function downloadReviewReport(analysis: AnalysisResult, resumeText: string, selectedFileName: string) {
+function getPdfTextWidth(doc: { getTextWidth?: (text: string) => number }, text: string) {
+  return doc.getTextWidth?.(text) ?? text.length * 4.5;
+}
+
+async function downloadReviewReport(analysis: AnalysisResult, selectedFileName: string, previewImages: string[]) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const baseName = selectedFileName.trim().replace(/\.[^.]+$/, "") || "resume";
@@ -332,10 +336,54 @@ async function downloadReviewReport(analysis: AnalysisResult, resumeText: string
     doc.addPage();
     return margin;
   };
+  const wrapTextToWidth = (text: string, maxWidth: number) => {
+    const words = reportText(text).split(" ").filter(Boolean);
+    const lines: string[] = [];
+    let line = "";
+
+    const pushLine = () => {
+      if (!line) return;
+      lines.push(line);
+      line = "";
+    };
+    const pushLongWord = (word: string) => {
+      let chunk = "";
+
+      for (const character of word) {
+        const nextChunk = `${chunk}${character}`;
+        if (chunk && getPdfTextWidth(doc, nextChunk) > maxWidth) {
+          lines.push(chunk);
+          chunk = character;
+        } else {
+          chunk = nextChunk;
+        }
+      }
+
+      line = chunk;
+    };
+
+    for (const word of words) {
+      const nextLine = line ? `${line} ${word}` : word;
+
+      if (getPdfTextWidth(doc, nextLine) <= maxWidth) {
+        line = nextLine;
+      } else if (getPdfTextWidth(doc, word) > maxWidth) {
+        pushLine();
+        pushLongWord(word);
+      } else {
+        pushLine();
+        line = word;
+      }
+    }
+
+    pushLine();
+    return lines.length ? lines : [" "];
+  };
   const addWrappedText = ({
     color = "ink",
     font = "normal",
     fontSize,
+    lineGap = 4,
     maxWidth = contentWidth,
     text,
     x = margin,
@@ -344,6 +392,7 @@ async function downloadReviewReport(analysis: AnalysisResult, resumeText: string
     color?: "ink" | "muted";
     font?: "bold" | "normal";
     fontSize: number;
+    lineGap?: number;
     maxWidth?: number;
     text: string;
     x?: number;
@@ -354,9 +403,15 @@ async function downloadReviewReport(analysis: AnalysisResult, resumeText: string
     if (color === "muted") setMuted();
     else setInk();
 
-    const lines = doc.splitTextToSize(text || " ", maxWidth) as string[];
+    const lines = wrapTextToWidth(text || " ", maxWidth);
     doc.text(lines, x, y);
-    return y + lines.length * (fontSize + 4);
+    return y + lines.length * (fontSize + lineGap);
+  };
+  const addFooter = (page: number, totalPages: number) => {
+    setMuted();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(`Page ${page} of ${totalPages}`, pageWidth - margin, pageHeight - 26, { align: "right" });
   };
 
   doc.setProperties({
@@ -365,44 +420,69 @@ async function downloadReviewReport(analysis: AnalysisResult, resumeText: string
     creator: "Resume Reviewer",
   });
 
-  setInk();
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
-  doc.text(`${baseName} Resume Review Report`, margin, 66, { maxWidth: contentWidth });
-  setMuted();
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(`Generated ${generatedAt} from the AI resume review currently shown in Resume Reviewer.`, margin, 88, {
-    maxWidth: contentWidth,
+  let y = margin + 8;
+  y = addWrappedText({
+    font: "bold",
+    fontSize: 25,
+    lineGap: 6,
+    text: `${baseName} Resume Review Report`,
+    y,
   });
-  drawLine(116);
+  y = addWrappedText({
+    color: "muted",
+    fontSize: 9,
+    maxWidth: contentWidth - 8,
+    text: `Generated ${generatedAt} from the AI resume review currently shown in Resume Reviewer.`,
+    y: y + 6,
+  });
+  y = addWrappedText({
+    color: "muted",
+    fontSize: 9,
+    maxWidth: contentWidth - 8,
+    text: "Generated at resreview.byammar.com.",
+    y: y + 2,
+  });
+  y += 20;
+  drawLine(y);
+  y += 26;
 
-  const metricWidth = (contentWidth - 32) / 5;
-  const metricY = 140;
+  const scoreCardWidth = 132;
+  const metricWidth = (contentWidth - scoreCardWidth - 32) / 4;
+  const metricY = y;
   const metrics = [
-    { label: "Resume rating", value: `${analysis.stats.score}` },
     { label: "Total feedback", value: `${analysis.stats.issues}` },
     { label: "Critical", value: `${counts.critical}` },
     { label: "Improve", value: `${counts.improve}` },
     { label: "Strengths", value: `${counts.solid}` },
   ];
 
+  doc.setFillColor(32, 31, 29);
+  doc.setDrawColor(32, 31, 29);
+  doc.rect(margin, metricY, scoreCardWidth, 66, "FD");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(26);
+  doc.text(`${analysis.stats.score}`, margin + 16, metricY + 31);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text("Resume rating", margin + 16, metricY + 49);
+
   metrics.forEach((metric, index) => {
-    const x = margin + index * (metricWidth + 8);
+    const x = margin + scoreCardWidth + 8 + index * (metricWidth + 8);
     doc.setFillColor(250, 250, 250);
     doc.setDrawColor(222, 219, 216);
-    doc.rect(x, metricY, metricWidth, 58, "FD");
+    doc.rect(x, metricY, metricWidth, 66, "FD");
     setInk();
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(21);
-    doc.text(metric.value, x + 12, metricY + 25);
+    doc.setFontSize(20);
+    doc.text(metric.value, x + 12, metricY + 28);
     setMuted();
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(metric.label, x + 12, metricY + 43, { maxWidth: metricWidth - 24 });
+    doc.text(metric.label, x + 12, metricY + 48, { maxWidth: metricWidth - 24 });
   });
 
-  let y = 230;
+  y += 100;
   const groups = createFeedbackGroups(analysis.feedback);
 
   if (groups.length === 0) {
@@ -429,64 +509,97 @@ async function downloadReviewReport(analysis: AnalysisResult, resumeText: string
     y += 8;
 
     for (const item of group.issues) {
-      const detailLines = doc.splitTextToSize(reportText(item.detail), contentWidth - 32) as string[];
-      const lineLines = doc.splitTextToSize(item.line || " ", contentWidth - 56) as string[];
-      const itemHeight = 82 + detailLines.length * 13 + lineLines.length * 12;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      const titleLines = wrapTextToWidth(item.title, contentWidth - 40);
+      doc.setFont("courier", "normal");
+      doc.setFontSize(8);
+      const lineLines = wrapTextToWidth(item.line || " ", contentWidth - 64);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const detailLines = wrapTextToWidth(item.detail, contentWidth - 40);
+      const itemHeight =
+        56 + titleLines.length * 15 + lineLines.length * 11 + detailLines.length * 13 + 24;
 
       y = ensureSpace(itemHeight, y);
+      const cardTop = y;
 
       if (item.severity === "critical") doc.setFillColor(255, 241, 239);
       else if (item.severity === "improve") doc.setFillColor(255, 247, 223);
       else doc.setFillColor(237, 246, 255);
       doc.setDrawColor(222, 219, 216);
-      doc.rect(margin, y, contentWidth, itemHeight - 12, "FD");
+      doc.rect(margin, cardTop, contentWidth, itemHeight - 12, "FD");
 
       setMuted();
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
-      doc.text(`${reportSeverityLabel(item.severity)}   Line ${item.lineNumber}`, margin + 16, y + 20);
+      doc.text(`${reportSeverityLabel(item.severity)}   Line ${item.lineNumber}`, margin + 16, cardTop + 20);
 
       y = addWrappedText({
         font: "bold",
         fontSize: 12,
-        maxWidth: contentWidth - 32,
+        maxWidth: contentWidth - 40,
         text: reportText(item.title),
         x: margin + 16,
-        y: y + 42,
+        y: cardTop + 42,
       });
 
+      y += 6;
       setMuted();
       doc.setFont("courier", "normal");
-      doc.setFontSize(9);
-      doc.text(lineLines, margin + 24, y + 8);
-      y += lineLines.length * 12 + 18;
+      doc.setFontSize(8);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(margin + 16, y - 10, contentWidth - 32, lineLines.length * 11 + 10, "F");
+      doc.text(lineLines, margin + 24, y);
+      y += lineLines.length * 11 + 16;
 
       y = addWrappedText({
         fontSize: 10,
-        maxWidth: contentWidth - 32,
+        maxWidth: contentWidth - 40,
         text: reportText(item.detail),
         x: margin + 16,
         y,
       });
-      y += 18;
+      y = cardTop + itemHeight + 8;
     }
   }
 
-  y = ensureSpace(76, y + 8);
-  drawLine(y);
-  y += 24;
-  y = addWrappedText({ font: "bold", fontSize: 14, text: "Resume Source", y });
-  y += 8;
-  doc.setFont("courier", "normal");
-  doc.setFontSize(8);
-  setMuted();
+  const resumePreviewPages = previewImages.filter((image) => /^data:image\/(?:png|jpe?g|webp)/i.test(image)).slice(0, 6);
+  for (const [index, image] of resumePreviewPages.entries()) {
+    doc.addPage();
+    let previewY = margin;
+    previewY = addWrappedText({
+      font: "bold",
+      fontSize: 18,
+      text: `Resume Preview${resumePreviewPages.length > 1 ? ` - Page ${index + 1}` : ""}`,
+      y: previewY,
+    });
+    previewY += 18;
+    drawLine(previewY);
+    previewY += 22;
 
-  for (const [index, line] of resumeText.replace(/\r\n/g, "\n").split("\n").entries()) {
-    const numberedLine = `${String(index + 1).padStart(3, " ")}  ${line || " "}`;
-    const lines = doc.splitTextToSize(numberedLine, contentWidth) as string[];
-    y = ensureSpace(lines.length * 11 + 4, y);
-    doc.text(lines, margin, y);
-    y += lines.length * 11 + 2;
+    const imageType = image.startsWith("data:image/jpeg") || image.startsWith("data:image/jpg") ? "JPEG" : image.startsWith("data:image/webp") ? "WEBP" : "PNG";
+    const previewWidth = contentWidth;
+    const previewHeight = pageHeight - previewY - margin - 20;
+    const resumeAspectRatio = 8.5 / 11;
+    let imageWidth = previewWidth;
+    let imageHeight = imageWidth / resumeAspectRatio;
+
+    if (imageHeight > previewHeight) {
+      imageHeight = previewHeight;
+      imageWidth = imageHeight * resumeAspectRatio;
+    }
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(222, 219, 216);
+    doc.rect(margin + (contentWidth - imageWidth) / 2 - 6, previewY - 6, imageWidth + 12, imageHeight + 12, "FD");
+    doc.addImage(image, imageType, margin + (contentWidth - imageWidth) / 2, previewY, imageWidth, imageHeight);
+  }
+
+  const totalPages = doc.getNumberOfPages();
+  for (let page = 1; page <= totalPages; page += 1) {
+    doc.setPage(page);
+    addFooter(page, totalPages);
   }
 
   doc.save(`${safeBaseName}-review-report.pdf`);
@@ -736,7 +849,7 @@ export default function ResumeReviewer() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => downloadReviewReport(modelAnalysis, resumeText, selectedFileName)}
+                onClick={() => downloadReviewReport(modelAnalysis, selectedFileName, previewImages)}
                 className="h-9 rounded-[2px] px-3"
               >
                 <Download className="size-4" />

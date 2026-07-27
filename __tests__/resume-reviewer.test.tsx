@@ -9,7 +9,10 @@ vi.mock("jspdf", () => ({
   jsPDF: vi.fn(
     function JsPDF() {
       return {
+        addImage: vi.fn(),
         addPage: vi.fn(),
+        getNumberOfPages: () => 1,
+        getTextWidth: (text: string) => text.length * 4,
         internal: {
           pageSize: {
             getHeight: () => 792,
@@ -23,6 +26,7 @@ vi.mock("jspdf", () => ({
         setFillColor: vi.fn(),
         setFont: vi.fn(),
         setFontSize: vi.fn(),
+        setPage: vi.fn(),
         setProperties: vi.fn(),
         setTextColor: vi.fn(),
         splitTextToSize: (text: string) => [text],
