@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   description:
     "Upload a resume and get direct, local-first feedback by section and line.",
   icons: {
-    icon: "/favicon.png",
+    icon: "/favicon-res-review.jpg",
   },
 };
 
