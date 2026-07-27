@@ -653,7 +653,6 @@ export default function ResumeReviewer() {
   };
 
   const selectFeedback = (feedbackId: string, shouldScroll = false) => {
-    setSelectedSeverity(null);
     setActiveFeedbackId(feedbackId);
 
     if (!shouldScroll) return;
@@ -865,28 +864,30 @@ function SeverityLegend({
 
   return (
     <div className="border-y border-[oklch(var(--line))] py-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Feedback severity</p>
-        {levels.map((level) => (
-          <button
-            type="button"
-            key={level.label}
-            aria-pressed={selectedSeverity === level.severity}
-            disabled={counts[level.severity] === 0}
-            onClick={() =>
-              setSelectedSeverity(selectedSeverity === level.severity ? null : level.severity)
-            }
-            className={`border-l-2 pl-2 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:underline aria-pressed:underline-offset-4 ${level.className}`}
-          >
-            {level.label}
-            <span className="ml-1 font-medium text-muted-foreground">({counts[level.severity]})</span>
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Feedback severity</p>
+          {levels.map((level) => (
+            <button
+              type="button"
+              key={level.label}
+              aria-pressed={selectedSeverity === level.severity}
+              disabled={counts[level.severity] === 0}
+              onClick={() =>
+                setSelectedSeverity(selectedSeverity === level.severity ? null : level.severity)
+              }
+              className={`border-l-2 pl-2 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:underline aria-pressed:underline-offset-4 ${level.className}`}
+            >
+              {level.label}
+              <span className="ml-1 font-medium text-muted-foreground">({counts[level.severity]})</span>
+            </button>
+          ))}
+        </div>
         {selectedSeverity ? (
           <button
             type="button"
             onClick={() => setSelectedSeverity(null)}
-            className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+            className="ml-auto text-xs font-medium text-muted-foreground underline underline-offset-4"
           >
             Show all
           </button>
