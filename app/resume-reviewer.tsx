@@ -124,6 +124,13 @@ Projects
 Skills
 React, Next.js, TypeScript, Tailwind CSS, Node.js`;
 
+const REVIEW_LOADING_MESSAGES = [
+  "Loading review, hang tight.",
+  "Reading for weak phrasing and missing proof.",
+  "Checking bullets for impact and specificity.",
+  "Scoring the resume against practical hiring signals.",
+];
+
 function getSectionName(line: string) {
   const normalized = line.trim().toLowerCase().replace(/:$/, "");
   return SECTION_HEADERS.includes(normalized) ? line.trim().replace(/:$/, "") : null;
@@ -451,7 +458,6 @@ export default function ResumeReviewer() {
   const [resumeText, setResumeText] = useState("");
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [highlightAreas, setHighlightAreas] = useState<HighlightArea[]>([]);
-  const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [reviewError, setReviewError] = useState("");
   const [modelAnalysis, setModelAnalysis] = useState<AnalysisResult | null>(null);
@@ -460,6 +466,7 @@ export default function ResumeReviewer() {
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [isReviewingResume, setIsReviewingResume] = useState(false);
+  const [reviewLoadingMessageIndex, setReviewLoadingMessageIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -504,6 +511,18 @@ export default function ResumeReviewer() {
 
     return () => controller.abort();
   }, [resumeText]);
+
+  useEffect(() => {
+    if (!isReviewingResume) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setReviewLoadingMessageIndex((index) => (index + 1) % REVIEW_LOADING_MESSAGES.length);
+    }, 2200);
+
+    return () => window.clearInterval(intervalId);
+  }, [isReviewingResume]);
   const activeLineNumber = useMemo(() => {
     if (!activeFeedbackId) return null;
     return analysis.feedback.find((item) => item.id === activeFeedbackId)?.lineNumber ?? null;
@@ -570,6 +589,7 @@ export default function ResumeReviewer() {
   }, [analysis.feedback, selectedSeverity]);
 
   const hasResume = resumeText.trim().length > 0;
+  const isWaitingForModelReview = hasResume && isReviewingResume && !modelAnalysis;
 
   const loadFile = async (file: File) => {
     setFileError("");
@@ -579,7 +599,6 @@ export default function ResumeReviewer() {
     try {
       const parsed = await parseResumeFile(file);
       if (!parsed.text.trim()) {
-        setFileName("");
         setPreviewImages([]);
         setHighlightAreas([]);
         setFileError(`${file.name} was selected, but no readable text was found in it.`);
@@ -589,15 +608,14 @@ export default function ResumeReviewer() {
 
       setModelAnalysis(null);
       setReviewError("");
+      setReviewLoadingMessageIndex(0);
       setIsReviewingResume(true);
       setResumeText(parsed.text);
       setPreviewImages(parsed.previewImages);
       setHighlightAreas(parsed.highlightAreas);
-      setFileName(file.name);
       setActiveFeedbackId(null);
       setIsUploadOpen(false);
     } catch {
-      setFileName("");
       setPreviewImages([]);
       setHighlightAreas([]);
       setFileError(`${file.name} was selected, but I could not parse it locally. Try exporting it as PDF, DOCX, or plain text.`);
@@ -623,10 +641,10 @@ export default function ResumeReviewer() {
     setResumeText("");
     setPreviewImages([]);
     setHighlightAreas([]);
-    setFileName("");
     setFileError("");
     setReviewError("");
     setModelAnalysis(null);
+    setReviewLoadingMessageIndex(0);
     setSelectedFileName("");
     setSelectedSeverity(null);
     setActiveFeedbackId(null);
@@ -641,13 +659,13 @@ export default function ResumeReviewer() {
     setResumeText(SAMPLE_RESUME);
     setPreviewImages(previewData.previewImages);
     setHighlightAreas(previewData.highlightAreas);
-    setFileName("sample-resume.txt");
     setSelectedFileName("sample-resume.txt");
     setSelectedSeverity(null);
     setActiveFeedbackId(null);
     setFileError("");
     setReviewError("");
     setModelAnalysis(null);
+    setReviewLoadingMessageIndex(0);
     setIsReviewingResume(true);
     setIsUploadOpen(false);
   };
@@ -748,23 +766,18 @@ export default function ResumeReviewer() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold">Generation & Evaluation</h2>
-                <p className="text-sm text-muted-foreground">
-                  {hasResume
-                    ? isReviewingResume
-                      ? "Generating AI feedback..."
-                      : modelAnalysis
-                        ? `${fileName} reviewed with OpenAI`
-                        : fileName
-                    : "Add a resume to generate feedback."}
-                </p>
               </div>
-              {hasResume ? <ResumeScore score={analysis.stats.score} /> : null}
+              {hasResume && !isWaitingForModelReview ? <ResumeScore score={analysis.stats.score} /> : null}
             </div>
-            <SeverityLegend
-              counts={severityCounts}
-              selectedSeverity={selectedSeverity}
-              setSelectedSeverity={setSelectedSeverity}
-            />
+            {isWaitingForModelReview ? (
+              <div className="border-y border-[oklch(var(--line))] py-2" aria-hidden="true" />
+            ) : (
+              <SeverityLegend
+                counts={severityCounts}
+                selectedSeverity={selectedSeverity}
+                setSelectedSeverity={setSelectedSeverity}
+              />
+            )}
             {reviewError ? (
               <div className="rounded-[2px] border border-[oklch(var(--warning-line))] bg-[oklch(var(--warning-bg))] px-3 py-2 text-sm font-medium text-[oklch(var(--warning-ink))]">
                 {reviewError}
@@ -781,30 +794,31 @@ export default function ResumeReviewer() {
                       imageSize="sm"
                       title="No feedback yet"
                     />
-                  ) : isReviewingResume && !modelAnalysis ? (
-                    <div className="bg-white p-4">
-                      <h3 className="font-semibold">Generating AI feedback</h3>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        The resume text has been parsed locally and is being reviewed with OpenAI.
-                      </p>
-                    </div>
+                  ) : isWaitingForModelReview ? (
+                    <FeedbackLoadingState
+                      message={REVIEW_LOADING_MESSAGES[reviewLoadingMessageIndex]}
+                    />
                   ) : analysis.feedback.length === 0 ? (
-                    <div className="bg-white p-4">
+                    <div className="animate-[feedback-in_180ms_ease-out_both] bg-white p-4">
                       <h3 className="font-semibold">No obvious issues found</h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         This review did not catch vague lines, missing metrics, or overloaded bullets. A human review can still judge role fit, ordering, and seniority signal.
                       </p>
                     </div>
                   ) : feedbackGroups.length === 0 ? (
-                    <div className="bg-white p-4">
+                    <div className="animate-[feedback-in_180ms_ease-out_both] bg-white p-4">
                       <h3 className="font-semibold">No issues at this severity</h3>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         Clear the severity filter or choose another level to continue reviewing.
                       </p>
                     </div>
                   ) : (
-                    feedbackGroups.map((group) => (
-                      <section key={group.section}>
+                    feedbackGroups.map((group, groupIndex) => (
+                      <section
+                        key={group.section}
+                        className="animate-[feedback-in_180ms_ease-out_both]"
+                        style={{ animationDelay: `${Math.min(groupIndex * 35, 140)}ms` }}
+                      >
                         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-y border-[oklch(var(--line))] bg-[oklch(var(--surface))] px-4 py-2 first:border-t-0">
                           <h3 className="text-sm font-semibold">{group.section}</h3>
                           <span className="text-xs font-medium text-muted-foreground">
@@ -843,12 +857,32 @@ function ResumeScore({ score }: { score: number }) {
   return (
     <div
       aria-label={`Resume rating ${score} out of 100`}
-      className="min-w-28 rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2 text-right"
+      className="min-w-24 bg-white px-1 py-1 text-right"
     >
       <p className="text-xs font-medium text-muted-foreground">Resume rating</p>
       <p className="mt-0.5 text-lg font-semibold leading-none text-[oklch(var(--ink))]">
         {score}
         <span className="text-xs font-medium text-muted-foreground">/100</span>
+      </p>
+    </div>
+  );
+}
+
+function FeedbackLoadingState({ message }: { message: string }) {
+  return (
+    <div
+      className="flex min-h-[494px] flex-col items-center justify-center bg-white px-6 py-12 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="mb-5 flex items-center gap-1.5" aria-hidden="true">
+        <span className="size-2 animate-[loading-dot_900ms_ease-in-out_infinite] rounded-full bg-[oklch(var(--ink))]" />
+        <span className="size-2 animate-[loading-dot_900ms_ease-in-out_150ms_infinite] rounded-full bg-[oklch(var(--ink))]" />
+        <span className="size-2 animate-[loading-dot_900ms_ease-in-out_300ms_infinite] rounded-full bg-[oklch(var(--ink))]" />
+      </div>
+      <h3 className="text-base font-semibold">Loading review</h3>
+      <p key={message} className="mt-2 max-w-sm animate-[feedback-in_180ms_ease-out_both] text-sm leading-6 text-muted-foreground">
+        {message}
       </p>
     </div>
   );
