@@ -619,11 +619,13 @@ export default function ResumeReviewer() {
   const [isReviewingResume, setIsReviewingResume] = useState(false);
   const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [reviewLoadingMessageIndex, setReviewLoadingMessageIndex] = useState(0);
+  const [isDataWarningClosing, setIsDataWarningClosing] = useState(false);
   const [isDataWarningDismissed, setIsDataWarningDismissed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const feedbackItemRefs = useRef(new Map<string, HTMLElement>());
+  const warningDismissTimeoutRef = useRef<number | null>(null);
   const analysis = modelAnalysis ?? EMPTY_ANALYSIS;
 
   useEffect(() => {
@@ -675,6 +677,14 @@ export default function ResumeReviewer() {
 
     return () => window.clearInterval(intervalId);
   }, [isReviewingResume]);
+
+  useEffect(() => {
+    return () => {
+      if (warningDismissTimeoutRef.current) {
+        window.clearTimeout(warningDismissTimeoutRef.current);
+      }
+    };
+  }, []);
   const activeLineNumber = useMemo(() => {
     if (!activeFeedbackId) return null;
     return analysis.feedback.find((item) => item.id === activeFeedbackId)?.lineNumber ?? null;
@@ -777,6 +787,7 @@ export default function ResumeReviewer() {
       setModelAnalysis(null);
       setReviewError("");
       setReviewLoadingMessageIndex(0);
+      setIsDataWarningClosing(false);
       setIsDataWarningDismissed(false);
       setIsReviewingResume(true);
       setResumeText(parsed.text);
@@ -814,6 +825,7 @@ export default function ResumeReviewer() {
     setReviewError("");
     setModelAnalysis(null);
     setReviewLoadingMessageIndex(0);
+    setIsDataWarningClosing(false);
     setIsDataWarningDismissed(false);
     setSelectedFileName("");
     setSelectedSeverity(null);
@@ -833,6 +845,17 @@ export default function ResumeReviewer() {
     } finally {
       setIsDownloadingReport(false);
     }
+  };
+
+  const dismissDataWarning = () => {
+    if (isDataWarningClosing) return;
+
+    setIsDataWarningClosing(true);
+    warningDismissTimeoutRef.current = window.setTimeout(() => {
+      setIsDataWarningDismissed(true);
+      setIsDataWarningClosing(false);
+      warningDismissTimeoutRef.current = null;
+    }, 220);
   };
 
   const selectFeedback = (feedbackId: string, shouldScroll = false) => {
@@ -963,7 +986,8 @@ export default function ResumeReviewer() {
             </div>
             {shouldShowDataWarning ? (
               <DataRetentionWarning
-                onDismiss={() => setIsDataWarningDismissed(true)}
+                isClosing={isDataWarningClosing}
+                onDismiss={dismissDataWarning}
               />
             ) : null}
             {isWaitingForModelReview || isReviewUnavailable ? (
@@ -1052,33 +1076,47 @@ export default function ResumeReviewer() {
   );
 }
 
-function DataRetentionWarning({ onDismiss }: { onDismiss: () => void }) {
+function DataRetentionWarning({
+  isClosing,
+  onDismiss,
+}: {
+  isClosing: boolean;
+  onDismiss: () => void;
+}) {
   return (
-    <section
-      role="status"
-      aria-live="polite"
-      className="animate-[feedback-in_180ms_ease-out_both] rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2 text-muted-foreground"
+    <div
+      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+        isClosing ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+      }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex gap-2">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[oklch(var(--placeholder))]" aria-hidden="true" />
-          <div>
-            <h3 className="text-xs font-semibold text-[oklch(var(--ink))]">Download before leaving</h3>
-            <p className="mt-0.5 max-w-2xl text-xs leading-5">
-              This review is only stored in this browser tab. Closing or refreshing the tab will delete the uploaded resume and generated feedback.
-            </p>
+      <section
+        role="status"
+        aria-live="polite"
+        className={`min-h-0 overflow-hidden rounded-[2px] border border-[oklch(var(--line))] bg-white px-3 py-2 text-muted-foreground transition-transform duration-200 ease-out ${
+          isClosing ? "-translate-y-1" : "translate-y-0"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex gap-2">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-[oklch(var(--placeholder))]" aria-hidden="true" />
+            <div>
+              <h3 className="text-xs font-semibold text-[oklch(var(--ink))]">Download before leaving</h3>
+              <p className="mt-0.5 max-w-2xl text-xs leading-5">
+                This review is only stored in this browser tab. Closing or refreshing the tab will delete the uploaded resume and generated feedback.
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            aria-label="Dismiss data warning"
+            onClick={onDismiss}
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[2px] text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Dismiss data warning"
-          onClick={onDismiss}
-          className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[2px] text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/45 active:translate-y-px"
-        >
-          <X className="size-3.5" />
-        </button>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 
