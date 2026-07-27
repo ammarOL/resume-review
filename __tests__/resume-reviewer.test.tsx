@@ -26,12 +26,19 @@ test("renders the resume reviewer work surface", () => {
 
   expect(screen.getByRole("heading", { level: 1, name: "Resume Reviewer" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Add resume" })).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Download report" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
   expect(screen.getByText("No resume loaded")).toBeDefined();
   expect(screen.getByText("No feedback yet")).toBeDefined();
 });
 
 test("keeps the severity filter active after selecting feedback", async () => {
+  const createObjectURL = vi.fn(() => "blob:resume-report");
+  const revokeObjectURL = vi.fn();
+  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -90,6 +97,10 @@ test("keeps the severity filter active after selecting feedback", async () => {
   });
 
   expect(screen.getByRole("button", { name: "Clear" })).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Download report" }));
+  expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+  expect(clickSpy).toHaveBeenCalled();
+  expect(revokeObjectURL).toHaveBeenCalledWith("blob:resume-report");
   expect(container.querySelector('[aria-label="Resume rating 72 out of 100"]')).toBeDefined();
 
   if (!improveFilter) throw new Error("Improve filter was not found.");

@@ -2,7 +2,7 @@
 
 import { ChangeEvent, DragEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { FileUp, Star, X } from "lucide-react";
+import { Download, FileUp, Star, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -269,6 +269,187 @@ async function parseResumeFile(file: File): Promise<ParsedResume> {
   };
 }
 
+function escapeReportHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function reportSeverityLabel(severity: Severity) {
+  if (severity === "critical") return "Critical";
+  if (severity === "improve") return "Improve";
+  return "Strength";
+}
+
+function reportSeverityClass(severity: Severity) {
+  if (severity === "critical") return "critical";
+  if (severity === "improve") return "improve";
+  return "solid";
+}
+
+function createFeedbackGroups(feedback: Feedback[]) {
+  const severityRank = { critical: 0, improve: 1, solid: 2 };
+  const groups = new Map<string, Feedback[]>();
+
+  for (const item of feedback) {
+    const group = groups.get(item.section) ?? [];
+    group.push(item);
+    groups.set(item.section, group);
+  }
+
+  return Array.from(groups.entries())
+    .map(([section, issues]) => ({
+      section,
+      issues: issues.sort(
+        (a, b) => severityRank[a.severity] - severityRank[b.severity] || a.lineNumber - b.lineNumber,
+      ),
+    }))
+    .sort((a, b) => a.issues[0].lineNumber - b.issues[0].lineNumber);
+}
+
+function createReviewReportHtml({
+  analysis,
+  resumeText,
+  title,
+}: {
+  analysis: AnalysisResult;
+  resumeText: string;
+  title: string;
+}) {
+  const generatedAt = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(new Date());
+  const escapedTitle = escapeReportHtml(title);
+  const counts = analysis.feedback.reduce<Record<Severity, number>>(
+    (totals, item) => {
+      totals[item.severity] += 1;
+      return totals;
+    },
+    { critical: 0, improve: 0, solid: 0 },
+  );
+  const feedbackGroups = createFeedbackGroups(analysis.feedback);
+  const feedbackHtml = feedbackGroups.length
+    ? feedbackGroups
+        .map(
+          (group) => `<section class="section">
+  <div class="section-heading">
+    <h2>${escapeReportHtml(group.section)}</h2>
+    <span>${group.issues.length} item${group.issues.length === 1 ? "" : "s"}</span>
+  </div>
+  <div class="feedback-list">
+    ${group.issues
+      .map(
+        (item) => `<article class="feedback ${reportSeverityClass(item.severity)}">
+      <div class="feedback-meta">
+        <span class="badge ${reportSeverityClass(item.severity)}">${reportSeverityLabel(item.severity)}</span>
+        <span>Line ${item.lineNumber}</span>
+      </div>
+      <h3>${escapeReportHtml(item.title)}</h3>
+      <blockquote>${escapeReportHtml(item.line)}</blockquote>
+      <p>${escapeReportHtml(item.detail)}</p>
+    </article>`,
+      )
+      .join("")}
+  </div>
+</section>`,
+        )
+        .join("")
+    : `<section class="section empty"><h2>No obvious issues found</h2><p>This review did not identify specific feedback items.</p></section>`;
+  const resumeHtml = resumeText
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line, index) => `<tr><td>${index + 1}</td><td>${escapeReportHtml(line || " ")}</td></tr>`)
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapedTitle}</title>
+  <style>
+    :root { --ink: #201f1d; --muted: #66615d; --line: #dedbd8; --surface: #fafafa; --critical: #8f2d23; --critical-bg: #fff1ef; --improve: #765300; --improve-bg: #fff7df; --solid: #245a84; --solid-bg: #edf6ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f3f2f1; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
+    main { max-width: 980px; min-height: 100vh; margin: 0 auto; padding: 48px; background: white; }
+    header { margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 30px; line-height: 1.15; letter-spacing: 0; }
+    h2 { font-size: 15px; line-height: 1.3; }
+    h3 { margin-top: 12px; font-size: 16px; line-height: 1.35; }
+    .subhead { margin-top: 8px; color: var(--muted); font-size: 14px; }
+    .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 28px 0; }
+    .metric { padding: 14px; background: var(--surface); border: 1px solid var(--line); }
+    .metric strong { display: block; font-size: 24px; line-height: 1; }
+    .metric span { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; }
+    .section { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+    .section-heading span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .feedback-list { display: grid; gap: 12px; }
+    .feedback { padding: 16px; background: white; border: 1px solid var(--line); }
+    .feedback.critical { background: var(--critical-bg); }
+    .feedback.improve { background: var(--improve-bg); }
+    .feedback.solid { background: var(--solid-bg); }
+    .feedback-meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 600; }
+    .badge { padding: 2px 7px; background: white; border: 1px solid currentColor; }
+    .badge.critical { color: var(--critical); }
+    .badge.improve { color: var(--improve); }
+    .badge.solid { color: var(--solid); }
+    blockquote { margin: 12px 0 0; padding-left: 12px; border-left: 1px solid var(--line); color: #36322f; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; white-space: pre-wrap; }
+    .feedback p, .empty p { margin-top: 12px; font-size: 14px; }
+    .resume-source { width: 100%; border-collapse: collapse; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; }
+    .resume-source td { padding: 6px 8px; border-top: 1px solid #ece9e6; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .resume-source td:first-child { width: 42px; color: var(--muted); text-align: right; user-select: none; }
+    @media print { body { background: white; } main { padding: 24px; } .feedback { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>${escapedTitle}</h1>
+      <p class="subhead">Generated ${escapeReportHtml(generatedAt)} from the AI resume review currently shown in Resume Reviewer.</p>
+    </header>
+    <section class="summary" aria-label="Report summary">
+      <div class="metric"><strong>${analysis.stats.score}</strong><span>Resume rating</span></div>
+      <div class="metric"><strong>${analysis.stats.issues}</strong><span>Total feedback</span></div>
+      <div class="metric"><strong>${counts.critical}</strong><span>Critical</span></div>
+      <div class="metric"><strong>${counts.improve}</strong><span>Improve</span></div>
+      <div class="metric"><strong>${counts.solid}</strong><span>Strengths</span></div>
+    </section>
+    ${feedbackHtml}
+    <section class="section">
+      <div class="section-heading"><h2>Resume Source</h2><span>${analysis.stats.lines} line${analysis.stats.lines === 1 ? "" : "s"}</span></div>
+      <table class="resume-source" aria-label="Numbered resume source"><tbody>${resumeHtml}</tbody></table>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function downloadReviewReport(analysis: AnalysisResult, resumeText: string, selectedFileName: string) {
+  const baseName = selectedFileName.trim().replace(/\.[^.]+$/, "") || "resume";
+  const safeBaseName = baseName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "resume";
+  const reportHtml = createReviewReportHtml({
+    analysis,
+    resumeText,
+    title: `${baseName} Resume Review Report`,
+  });
+  const blob = new Blob([reportHtml], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${safeBaseName}-review-report.html`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function ResumeReviewer() {
   const [resumeText, setResumeText] = useState("");
   const [previewImages, setPreviewImages] = useState<string[]>([]);
@@ -509,6 +690,17 @@ export default function ResumeReviewer() {
               <Star className="size-4" />
               Star on GitHub
             </a>
+            {modelAnalysis ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => downloadReviewReport(modelAnalysis, resumeText, selectedFileName)}
+                className="h-9 rounded-[2px] px-3"
+              >
+                <Download className="size-4" />
+                Download report
+              </Button>
+            ) : null}
             {hasResume ? (
               <Button
                 type="button"
