@@ -177,7 +177,7 @@ export async function POST(request: Request) {
 
   try {
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+      model: process.env.OPENAI_MODEL ?? "gpt-5.1",
       instructions:
         "You are a direct, exacting resume editor. Review the resume for hiring competitiveness. Return only JSON that matches the schema. Use line numbers from the numbered resume exactly. Every feedback item must cite the exact line text from the resume without the numeric prefix. Prefer concrete, critical feedback over generic praise. Include solid items only for genuinely strong lines worth preserving.",
       input: `Review this numbered resume:\n\n${numberedResume}`,
