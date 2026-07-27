@@ -32,11 +32,14 @@ describe("POST /api/review-resume", () => {
   beforeEach(() => {
     vi.resetModules();
     createMock.mockReset();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-27T12:00:00.000Z"));
     process.env.OPENAI_API_KEY = "test-key";
     delete process.env.OPENAI_MODEL;
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     process.env.OPENAI_API_KEY = originalApiKey;
     process.env.OPENAI_MODEL = originalModel;
   });
@@ -67,6 +70,11 @@ describe("POST /api/review-resume", () => {
     expect(createMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "gpt-5.1",
+        input: expect.stringContaining("Today's date is July 27, 2026."),
+      }),
+    );
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
         input: expect.stringContaining("1: Responsible for various projects."),
       }),
     );

@@ -229,6 +229,13 @@ function parseReviewResult(value: unknown): ReviewResult | null {
   };
 }
 
+function getTodayLabel() {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "long",
+    timeZone: "UTC",
+  }).format(new Date());
+}
+
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) {
     return Response.json({ error: "OPENAI_API_KEY is not configured." }, { status: 500 });
@@ -250,12 +257,13 @@ export async function POST(request: Request) {
     .split("\n")
     .map((line, index) => `${index + 1}: ${line}`)
     .join("\n");
+  const today = getTodayLabel();
 
   try {
     const response = await client.responses.create({
       model: process.env.OPENAI_MODEL ?? "gpt-5.1",
       instructions: reviewInstructions,
-      input: `Review this numbered resume:\n\n${numberedResume}`,
+      input: `Today's date is ${today}.\n\nReview this numbered resume:\n\n${numberedResume}`,
       max_output_tokens: 3600,
       text: {
         format: {
