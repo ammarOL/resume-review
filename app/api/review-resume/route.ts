@@ -1,6 +1,7 @@
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 
 type Severity = "critical" | "improve" | "solid";
+type ReasoningEffort = "none" | "default" | "low" | "medium" | "high" | null | undefined;
 
 type Feedback = {
   id: string;
@@ -30,10 +31,6 @@ type ReviewResult = {
     score: number;
   };
 };
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 const reviewInstructions = `You are a senior software engineering recruiter and hiring manager with experience hiring at top technology companies.
 
@@ -236,9 +233,40 @@ function getTodayLabel() {
   }).format(new Date());
 }
 
+function getGroqClient() {
+  return new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+  });
+}
+
+function getReviewModel() {
+  return process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
+}
+
+function getReasoningEffort(model: string): ReasoningEffort {
+  if (model.startsWith("openai/gpt-oss-")) return "low";
+  if (model.startsWith("qwen/")) return "none";
+  return undefined;
+}
+
+function extractJsonObject(text: string) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+
+  return trimmed.slice(start, end + 1);
+}
+
 export async function POST(request: Request) {
-  if (!process.env.OPENAI_API_KEY) {
-    return Response.json({ error: "OPENAI_API_KEY is not configured." }, { status: 500 });
+  if (!process.env.GROQ_API_KEY) {
+    return Response.json({ error: "GROQ_API_KEY is not configured." }, { status: 500 });
   }
 
   const body = (await request.json().catch(() => null)) as { resumeText?: unknown } | null;
@@ -260,22 +288,49 @@ export async function POST(request: Request) {
   const today = getTodayLabel();
 
   try {
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-5.1",
-      instructions: reviewInstructions,
-      input: `Today's date is ${today}.\n\nReview this numbered resume:\n\n${numberedResume}`,
-      max_output_tokens: 3600,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "resume_review",
-          strict: true,
-          schema: reviewSchema,
-        },
+    const client = getGroqClient();
+    const model = getReviewModel();
+    const reasoningEffort = getReasoningEffort(model);
+    const messages: Groq.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: reviewInstructions },
+      {
+        role: "user",
+        content: `Today's date is ${today}.\n\nReview this numbered resume:\n\n${numberedResume}`,
       },
-    });
+    ];
+    const requestPayload = {
+      model,
+      messages,
+      max_completion_tokens: 6000,
+      temperature: 0,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    };
 
-    const parsed = parseReviewResult(JSON.parse(response.output_text));
+    const response = await client.chat.completions
+      .create({
+        ...requestPayload,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "resume_review",
+            strict: true,
+            schema: reviewSchema,
+          },
+        },
+      })
+      .catch((error) => {
+        console.warn("Groq structured output failed; retrying with JSON mode", error);
+        return client.chat.completions.create({
+          ...requestPayload,
+          response_format: {
+            type: "json_object",
+          },
+        });
+      });
+
+    const outputText = response.choices[0]?.message.content;
+    const jsonText = outputText ? extractJsonObject(outputText) : null;
+    const parsed = jsonText ? parseReviewResult(JSON.parse(jsonText)) : null;
 
     if (!parsed) {
       return Response.json({ error: "The model returned an invalid review." }, { status: 502 });
@@ -283,7 +338,7 @@ export async function POST(request: Request) {
 
     return Response.json(parsed);
   } catch (error) {
-    console.error("OpenAI resume review failed", error);
+    console.error("Groq resume review failed", error);
     return Response.json({ error: "Could not generate the resume review." }, { status: 502 });
   }
 }

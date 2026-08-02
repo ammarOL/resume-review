@@ -8,7 +8,7 @@ The app is built for people who want practical, critical feedback before sending
 
 - Upload PDF, DOCX, plain text, Markdown, RTF, or CSV resumes.
 - Parse resumes in the browser with no file storage.
-- Generate direct OpenAI-backed feedback focused on hiring competitiveness, technical depth, ownership, impact, clarity, and ATS compatibility.
+- Generate direct Groq-backed feedback focused on hiring competitiveness, technical depth, ownership, impact, clarity, and ATS compatibility.
 - Render uploaded resumes as document previews.
 - Show a resume rating out of 100 and feedback grouped by resume section.
 - Filter feedback by severity: Informative, Improve, and Critical.
@@ -21,7 +21,7 @@ The app is built for people who want practical, critical feedback before sending
 
 ## Privacy Model
 
-Resume parsing happens locally in the browser session. The app sends extracted resume text to the server-side review endpoint so OpenAI can generate feedback, but it does not upload the original file or persist resume data. Closing or refreshing the tab clears the in-memory resume, review, and generated report state. Reviews are limited to 60,000 characters per request.
+Resume parsing happens locally in the browser session. The app sends extracted resume text to the server-side review endpoint so Groq can generate feedback, but it does not upload the original file or persist resume data. Closing or refreshing the tab clears the in-memory resume, review, and generated report state. Reviews are limited to 60,000 characters per request.
 
 ## Tech Stack
 
@@ -32,7 +32,7 @@ Resume parsing happens locally in the browser session. The app sends extracted r
 - shadcn/base-ui components
 - PDF.js for PDF parsing and preview rendering
 - Mammoth for DOCX text extraction
-- OpenAI API for AI feedback
+- Groq API for AI feedback
 - jsPDF for downloadable PDF reports
 - Vercel Analytics
 
@@ -44,13 +44,13 @@ Install dependencies:
 npm install
 ```
 
-Configure the server-side OpenAI client in `.env.local`:
+Configure the server-side Groq client in `.env.local`:
 
 ```bash
-OPENAI_API_KEY=your_api_key_here
+GROQ_API_KEY=your_api_key_here
 ```
 
-`OPENAI_MODEL` is optional and defaults to `gpt-5.1`.
+`GROQ_MODEL` is optional and defaults to `openai/gpt-oss-20b`.
 
 Run the development server:
 
